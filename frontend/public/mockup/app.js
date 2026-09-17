@@ -130,7 +130,7 @@ document.getElementById("repTable").innerHTML = `
 
 /* ---------- charts (hand-built SVG) ---------- */
 (function line() {
-  const W = 680, H = 230, pad = 34, max = 12;
+  const W = 680, H = 175, pad = 28, max = 12;
   const x = i => pad + (i * (W - pad * 2)) / (omzet.length - 1);
   const y = v => H - pad - (v / max) * (H - pad * 1.6);
   const pts = omzet.map((v, i) => [x(i), y(v)]);
@@ -161,7 +161,7 @@ document.getElementById("repTable").innerHTML = `
 
 (function bar() {
   const data = [["Snack", 24.6], ["Sambal", 14.2], ["Bundling", 11.1], ["Minuman", 5.3], ["Lainnya", 3.0]];
-  const W = 680, H = 250, pad = 40, max = 28, bw = 54;
+  const W = 680, H = 190, pad = 32, max = 28, bw = 54;
   const gap = (W - pad * 2 - bw * data.length) / (data.length - 1);
   document.getElementById("barChart").innerHTML = `
   <svg viewBox="0 0 ${W} ${H}">
