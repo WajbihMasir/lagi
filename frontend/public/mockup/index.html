@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TuntasUMKM — Dashboard Operasional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<aside class="sidebar" id="sidebar" data-testid="sidebar">
+  <div class="brand">
+    <a class="logo" href="#ringkasan" data-testid="brand-logo" aria-label="TuntasUMKM">
+      <svg class="logo-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#F7E6A8"/>
+            <stop offset="45%" stop-color="#D9A94B"/>
+            <stop offset="100%" stop-color="#8E6B1F"/>
+          </linearGradient>
+          <linearGradient id="jadeGrad" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stop-color="#0B3B2E"/>
+            <stop offset="100%" stop-color="#2FB98A"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 3.5 58 17v30L32 60.5 6 47V17z" fill="url(#jadeGrad)" opacity=".55"/>
+        <path d="M32 3.5 58 17v30L32 60.5 6 47V17z" fill="none" stroke="url(#goldGrad)" stroke-width="2.2"/>
+        <path d="M32 12.5 49.5 21.5v21L32 51.5 14.5 42.5v-21z" fill="none" stroke="url(#goldGrad)" stroke-width="1" opacity=".55"/>
+        <path d="M21 25.5h22M32 25.5V44" stroke="url(#goldGrad)" stroke-width="3.6" stroke-linecap="round"/>
+        <path d="M24.5 36.5 30 42l11.5-13" fill="none" stroke="#39D9A0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="logo-text">
+        <strong>Tuntas<em>UMKM</em></strong>
+        <small>AI Agent Operasional</small>
+      </span>
+    </a>
+    <button class="collapse-btn" id="collapseBtn" data-testid="sidebar-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <nav class="nav" data-testid="sidebar-nav">
+    <p class="nav-label">Operasional</p>
+    <a class="nav-item active" href="#ringkasan" data-view="ringkasan" data-testid="nav-ringkasan">
+      <svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6V11h-6zm0-11v5h6V4z" fill="currentColor"/></svg>
+      <span>Ringkasan</span>
+    </a>
+    <a class="nav-item" href="#transaksi" data-view="transaksi" data-testid="nav-transaksi">
+      <svg viewBox="0 0 24 24"><path d="M3 7h13l-3-3m8 13H8l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Transaksi</span>
+      <i class="pill">6</i>
+    </a>
+    <a class="nav-item" href="#produk" data-view="produk" data-testid="nav-produk">
+      <svg viewBox="0 0 24 24"><path d="M12 3 4 7v10l8 4 8-4V7zM4 7l8 4 8-4M12 11v10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Produk &amp; Stok</span>
+    </a>
+    <a class="nav-item" href="#laporan" data-view="laporan" data-testid="nav-laporan">
+      <svg viewBox="0 0 24 24"><path d="M5 19V9m7 10V5m7 14v-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <span>Laporan</span>
+    </a>
+  </nav>
+
+  <div class="side-foot">
+    <div class="quota" data-testid="sidebar-quota">
+      <div class="quota-top"><span>Kuota Agent</span><b>78%</b></div>
+      <div class="bar"><i style="width:78%"></i></div>
+      <p>3.120 / 4.000 pesan bulan ini</p>
+    </div>
+    <div class="user" data-testid="sidebar-user">
+      <span class="avatar">RT</span>
+      <span class="user-meta"><b>Bu Ratna</b><small>Toko Ratna Snack</small></span>
+    </div>
+  </div>
+</aside>
+
+<main class="main" data-testid="main-content">
+  <header class="topbar">
+    <div>
+      <p class="crumb" id="crumb">Operasional / Ringkasan</p>
+      <h1 id="pageTitle">Ringkasan Harian</h1>
+    </div>
+    <div class="topbar-actions">
+      <label class="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input type="text" placeholder="Cari pesanan, produk…" data-testid="global-search" />
+      </label>
+      <button class="ghost-btn" data-testid="period-btn">Hari ini ▾</button>
+      <button class="gold-btn" data-testid="approve-all-btn">Tinjau Approval</button>
+    </div>
+  </header>
+
+  <!-- RINGKASAN -->
+  <section class="view active" id="view-ringkasan" data-testid="view-ringkasan">
+    <div class="kpi-grid">
+      <article class="card kpi" data-testid="kpi-order">
+        <p class="kpi-label">Order masuk via chat</p>
+        <h2>48</h2><span class="delta up">+12,4% vs kemarin</span>
+      </article>
+      <article class="card kpi" data-testid="kpi-omzet">
+        <p class="kpi-label">Omzet terkonfirmasi</p>
+        <h2>Rp 9,4<small>jt</small></h2><span class="delta up">+6,1% vs kemarin</span>
+      </article>
+      <article class="card kpi" data-testid="kpi-akurasi">
+        <p class="kpi-label">Akurasi ekstraksi order</p>
+        <h2>94<small>%</small></h2><span class="delta up">target ≥ 90%</span>
+      </article>
+      <article class="card kpi" data-testid="kpi-intervensi">
+        <p class="kpi-label">Intervensi manual</p>
+        <h2>7<small>%</small></h2><span class="delta down">−2,3% vs kemarin</span>
+      </article>
+    </div>
+
+    <div class="two-col">
+      <article class="card chart-card" data-testid="chart-omzet">
+        <div class="card-head">
+          <div><h3>Omzet 7 hari terakhir</h3><p>Order terkonfirmasi setelah approval</p></div>
+          <span class="tag jade">Rp 58,2 jt</span>
+        </div>
+        <div id="lineChart" class="chart"></div>
+      </article>
+
+      <article class="card" data-testid="approval-queue">
+        <div class="card-head"><div><h3>Menunggu approval</h3><p>Agent tidak eksekusi tanpa izin</p></div><span class="tag">6</span></div>
+        <ul class="queue" id="queueList"></ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- TRANSAKSI -->
+  <section class="view" id="view-transaksi" data-testid="view-transaksi">
+    <div class="kpi-grid three">
+      <article class="card kpi"><p class="kpi-label">Perlu approval</p><h2>6</h2><span class="delta">nilai Rp 2,1 jt</span></article>
+      <article class="card kpi"><p class="kpi-label">Terkonfirmasi hari ini</p><h2>42</h2><span class="delta up">Rp 9,4 jt</span></article>
+      <article class="card kpi"><p class="kpi-label">Duplikat dicegah</p><h2>3</h2><span class="delta">idempotency key aktif</span></article>
+    </div>
+    <article class="card" data-testid="table-transaksi">
+      <div class="card-head">
+        <div><h3>Daftar transaksi</h3><p>Hasil ekstraksi otomatis dari percakapan pelanggan</p></div>
+        <div class="chips">
+          <button class="chip active">Semua</button><button class="chip">Pending</button><button class="chip">Terkonfirmasi</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table class="table" id="trxTable"></table></div>
+    </article>
+  </section>
+
+  <!-- PRODUK -->
+  <section class="view" id="view-produk" data-testid="view-produk">
+    <div class="kpi-grid three">
+      <article class="card kpi"><p class="kpi-label">SKU aktif</p><h2>24</h2><span class="delta">katalog tersinkron</span></article>
+      <article class="card kpi"><p class="kpi-label">Stok kritis</p><h2>4</h2><span class="delta down">perlu restock</span></article>
+      <article class="card kpi"><p class="kpi-label">Nilai persediaan</p><h2>Rp 31,8<small>jt</small></h2><span class="delta up">+3,2%</span></article>
+    </div>
+    <article class="card" data-testid="table-produk">
+      <div class="card-head"><div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div><button class="gold-btn sm">+ Produk</button></div>
+      <div class="table-wrap"><table class="table" id="prodTable"></table></div>
+    </article>
+  </section>
+
+  <!-- LAPORAN -->
+  <section class="view" id="view-laporan" data-testid="view-laporan">
+    <div class="two-col">
+      <article class="card chart-card" data-testid="chart-kategori">
+        <div class="card-head"><div><h3>Kontribusi penjualan</h3><p>Per kategori produk, bulan ini</p></div><span class="tag jade">Rp 58,2 jt</span></div>
+        <div id="barChart" class="chart"></div>
+      </article>
+      <article class="card" data-testid="metrics-agent">
+        <div class="card-head"><div><h3>Performa agent</h3><p>Metrik kualitas terhadap target PRD</p></div></div>
+        <ul class="metrics" id="metricList"></ul>
+      </article>
+    </div>
+    <article class="card" data-testid="table-laporan">
+      <div class="card-head"><div><h3>Rekap mingguan</h3><p>Siap diunduh untuk pembukuan</p></div><button class="ghost-btn sm">Ekspor CSV</button></div>
+      <div class="table-wrap"><table class="table" id="repTable"></table></div>
+    </article>
+  </section>
+</main>
+
+<script src="./app.js"></script>
+</body>
+</html>
