@@ -175,7 +175,9 @@ body.collapsed .nav-label,
 body.collapsed .nav-item span,
 body.collapsed .pill,
 body.collapsed .quota,
-body.collapsed .user-meta{opacity:0;width:0;overflow:hidden;pointer-events:none}
+body.collapsed .user-meta{opacity:0;width:0;padding:0;margin:0;border:0;overflow:hidden;pointer-events:none}
+body.collapsed .pill{display:none}
+body.collapsed .quota{display:none}
 body.collapsed .brand{justify-content:center;padding-right:0}
 body.collapsed .logo{padding-left:0;gap:0;justify-content:center}
 body.collapsed .logo-mark{margin-left:0}
