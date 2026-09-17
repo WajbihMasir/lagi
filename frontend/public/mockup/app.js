@@ -13,6 +13,7 @@ btn.addEventListener("click", () => {
 /* ---------- routing ---------- */
 const titles = {
   ringkasan: ["Operasional / Ringkasan", "Ringkasan Harian"],
+  inbox: ["Operasional / Inbox Chat", "Inbox Chat Pelanggan"],
   transaksi: ["Operasional / Transaksi", "Transaksi & Approval"],
   produk: ["Operasional / Produk", "Produk & Stok"],
   laporan: ["Operasional / Laporan", "Laporan & Performa"]
@@ -61,8 +62,7 @@ const prod = [
 ];
 
 const metrics = [
-  ["Akurasi ekstraksi order", 94, "target ≥ 90%"],
-  ["Akurasi stok & harga", 97, "target ≥ 95%"],
+  ["Akurasi ekstraksi order", 94, "target ≥ 90%"],  ["Akurasi stok & harga", 97, "target ≥ 95%"],
   ["Completion rate", 91, "target ≥ 85%"],
   ["Grounding rate", 88, "target ≥ 80%"],
   ["Intervensi manual", 7, "target ≤ 15%"]
@@ -76,8 +76,8 @@ const rep = [
 ];
 
 /* ---------- render ---------- */
-document.getElementById("queueList").innerHTML = queue.map(q => `
-  <li data-testid="queue-item">
+document.getElementById("queueList").innerHTML = queue.map((q, i) => `
+  <li data-testid="queue-item" data-i="${i < 4 ? i : ""}" style="cursor:${i < 4 ? "pointer" : "default"}">
     <span class="dot ${q.s}"></span>
     <span class="q-meta"><b>${q.n}</b><small>${q.d}</small></span>
     <span class="q-amt">${q.a === 0 ? "—" : rp(q.a)}</span>
@@ -168,3 +168,151 @@ document.querySelectorAll(".chips .chip").forEach(c =>
     c.parentElement.querySelectorAll(".chip").forEach(o => o.classList.remove("active"));
     c.classList.add("active");
   }));
+
+/* ---------- inbox chat ---------- */
+const convs = [
+  {
+    id: "TU-2411", n: "Wulan Sari", ini: "WS", ch: "WhatsApp", phone: "+62 812-3344-9087",
+    last: "Oke bu, total berapa ya?", time: "09:42", unread: 2, state: "pending_approval",
+    addr: "Jl. Kaliurang 21, Sleman", total: 348000,
+    lines: [["Keripik Pisang Balado · 12 pcs", 330000], ["Ongkir JNE REG", 18000]],
+    thread: [
+      ["cust", "Bu, keripik pisang yg balado masih ada? mau 12 pcs", "09:38"],
+      ["tool", "check_stock(sku=KRP-01) → tersedia 148 pcs", ""],
+      ["agent", "Halo Kak Wulan 👋 Keripik Pisang Balado tersedia (stok 148 pcs). Harga Rp 27.500/pcs untuk pembelian ≥10 pcs.", "09:39"],
+      ["cust", "Oke bu, total berapa ya? kirim ke Jl. Kaliurang 21 Sleman", "09:40"],
+      ["tool", "calculate_total(qty=12, sku=KRP-01) → Rp 330.000 · ongkir JNE REG Rp 18.000", ""],
+      ["agent", "Totalnya Rp 348.000 (12 pcs = Rp 330.000 + ongkir Rp 18.000). Saya siapkan draft pesanannya dulu ya Kak.", "09:41"],
+      ["tool", "create_draft_order(idempotency_key=wa-9087-0942) → draft TU-2411 dibuat, menunggu approval pemilik", ""]
+    ]
+  },
+  {
+    id: "TU-2410", n: "Andi Pratama", ini: "AP", ch: "WhatsApp", phone: "+62 813-8891-2210",
+    last: "3 box sambal roa yg pedas ya", time: "09:18", unread: 1, state: "pending_approval",
+    addr: "Perum Griya Asri B-4, Depok", total: 195000,
+    lines: [["Sambal Roa Pedas · 3 box", 195000]],
+    thread: [
+      ["cust", "3 box sambal roa yg pedas ya bu", "09:15"],
+      ["tool", "check_stock(sku=SRO-02) → tersedia 24 box", ""],
+      ["agent", "Siap Kak Andi, Sambal Roa Pedas 3 box = Rp 195.000. Alamat kirim masih Perum Griya Asri B-4?", "09:16"],
+      ["cust", "iya bener bu", "09:18"],
+      ["tool", "create_draft_order(idempotency_key=wa-2210-0918) → draft TU-2410 menunggu approval", ""]
+    ]
+  },
+  {
+    id: "—", n: "Dewi Lestari", ini: "DL", ch: "Instagram", phone: "@dewi.lestari",
+    last: "Rengginang 5kg ready kak?", time: "08:57", unread: 0, state: "answered",
+    addr: "—", total: 0, lines: [],
+    thread: [
+      ["cust", "Rengginang 5kg ready kak?", "08:55"],
+      ["tool", "check_stock(sku=RNG-04) → sisa 11 pcs (stok kritis)", ""],
+      ["agent", "Untuk Rengginang stok tinggal 11 pcs Kak, belum cukup 5kg. Restock masuk Kamis, mau saya kabari saat ready?", "08:56"],
+      ["cust", "boleh kak", "08:57"]
+    ]
+  },
+  {
+    id: "TU-2409", n: "Toko Berkah", ini: "TB", ch: "WhatsApp", phone: "+62 856-7712-3390",
+    last: "Kacang telur 20 pcs harga reseller", time: "08:55", unread: 1, state: "pending_approval",
+    addr: "Pasar Kranggan blok C-12, Yogyakarta", total: 540000,
+    lines: [["Kacang Telur Gurih · 20 pcs (reseller)", 520000], ["Ongkir instant", 20000]],
+    thread: [
+      ["cust", "Kacang telur 20 pcs harga reseller ya", "08:50"],
+      ["tool", "check_policy(doc=kebijakan-reseller) → diskon reseller 4% untuk ≥20 pcs", ""],
+      ["agent", "Sesuai kebijakan reseller, 20 pcs dapat harga Rp 26.000/pcs = Rp 520.000 + ongkir instant Rp 20.000.", "08:52"],
+      ["cust", "oke gas bu", "08:55"],
+      ["tool", "create_draft_order(idempotency_key=wa-3390-0855) → draft TU-2409 menunggu approval", ""]
+    ]
+  }
+];
+
+const convList = document.getElementById("convList");
+convList.innerHTML = convs.map((c, i) => `
+  <li data-i="${i}" class="${i === 0 ? "active" : ""}" data-testid="conv-item-${i}">
+    <span class="avatar">${c.ini}</span>
+    <span class="conv-meta"><b>${c.n}</b><small>${c.last}</small></span>
+    <span class="conv-side"><small>${c.time}</small>${c.unread ? `<i class="pill">${c.unread}</i>` : ""}</span>
+  </li>`).join("");
+
+function renderConv(i) {
+  const c = convs[i];
+  document.getElementById("chatAvatar").textContent = c.ini;
+  document.getElementById("chatName").textContent = c.n;
+  document.getElementById("chatMeta").textContent = `${c.ch} · ${c.phone}`;
+  const st = document.querySelector('[data-testid="chat-state"]');
+  st.textContent = "state: " + c.state;
+  st.className = "badge " + (c.state === "pending_approval" ? "warn" : "ok");
+
+  document.getElementById("thread").innerHTML = c.thread.map(m =>
+    m[0] === "tool"
+      ? `<div class="msg tool"><b>tool</b> · ${m[1]}</div>`
+      : `<div class="msg ${m[0]}">${m[1]}${m[2] ? `<small>${m[2]}</small>` : ""}</div>`).join("");
+
+  const draft = document.querySelector('[data-testid="draft-order"]');
+  if (!c.lines.length) { draft.hidden = true; }
+  else {
+    draft.hidden = false;
+    draft.querySelector(".draft-head b").textContent = "Draft order " + c.id;
+    draft.querySelector(".q-amt").textContent = rp(c.total);
+    document.getElementById("draftLines").innerHTML =
+      c.lines.map(l => `<li><span>${l[0]}</span><span>${rp(l[1])}</span></li>`).join("");
+    draft.querySelector('[data-testid="draft-approve"]').dataset.i = i;
+  }
+  convList.querySelectorAll("li").forEach(li => li.classList.toggle("active", +li.dataset.i === i));
+}
+convList.addEventListener("click", e => {
+  const li = e.target.closest("li"); if (li) renderConv(+li.dataset.i);
+});
+renderConv(0);
+
+/* ---------- detail approval modal ---------- */
+const modal = document.getElementById("modal");
+const toastEl = document.getElementById("toast");
+const tick = `<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+function openApproval(i) {
+  const c = convs[i];
+  document.getElementById("mId").textContent = c.id;
+  document.getElementById("mCust").textContent = c.n;
+  document.getElementById("mAddr").textContent = c.addr;
+  document.querySelectorAll(".m-grid b")[1].textContent = c.ch;
+  document.getElementById("mTotal").textContent = rp(c.total);
+  document.getElementById("mLines").innerHTML =
+    c.lines.map(l => `<li><span>${l[0]}</span><span>${rp(l[1])}</span></li>`).join("");
+  document.getElementById("mChecks").innerHTML = [
+    "Stok tersedia & terverifikasi dari katalog",
+    "Harga cocok dengan kebijakan toko",
+    "Tidak terdeteksi duplikat (idempotency key aktif)",
+    "Stok baru berkurang setelah Anda menyetujui"
+  ].map(t => `<li>${tick}<span>${t}</span></li>`).join("");
+  document.getElementById("mApprove").dataset.i = i;
+  modal.hidden = false;
+}
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (toastEl.hidden = true), 2600);
+}
+
+document.addEventListener("click", e => {
+  const approveBtn = e.target.closest('[data-testid="draft-approve"]');
+  if (approveBtn) { openApproval(+approveBtn.dataset.i); return; }
+
+  const row = e.target.closest('[data-testid="queue-item"]');
+  if (row && row.dataset.i !== "") { location.hash = "#inbox"; renderConv(+row.dataset.i); openApproval(+row.dataset.i); return; }
+
+  if (e.target.closest('[data-testid="approve-all-btn"]')) { location.hash = "#inbox"; renderConv(0); openApproval(0); return; }
+
+  if (e.target.closest("[data-close]")) {
+    modal.hidden = true;
+    if (e.target.closest('[data-testid="approval-reject"]')) toast("Order ditolak — pelanggan dikabari agent");
+    return;
+  }
+  if (e.target.closest("#mApprove")) {
+    const c = convs[+e.target.closest("#mApprove").dataset.i];
+    modal.hidden = true;
+    c.state = "approved";
+    renderConv(convs.indexOf(c));
+    toast(`Order ${c.id} disetujui · invoice terkirim`);
+  }
+  if (e.target.closest('[data-testid="draft-reject"]')) toast("Draft ditolak — agent minta konfirmasi ulang");
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") modal.hidden = true; });

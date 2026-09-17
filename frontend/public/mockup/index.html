@@ -49,6 +49,11 @@
       <svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6V11h-6zm0-11v5h6V4z" fill="currentColor"/></svg>
       <span>Ringkasan</span>
     </a>
+    <a class="nav-item" href="#inbox" data-view="inbox" data-testid="nav-inbox">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l.9-4.4A8 8 0 1 1 20 12z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Inbox Chat</span>
+      <i class="pill">4</i>
+    </a>
     <a class="nav-item" href="#transaksi" data-view="transaksi" data-testid="nav-transaksi">
       <svg viewBox="0 0 24 24"><path d="M3 7h13l-3-3m8 13H8l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Transaksi</span>
@@ -130,6 +135,36 @@
     </div>
   </section>
 
+  <!-- INBOX CHAT -->
+  <section class="view" id="view-inbox" data-testid="view-inbox">
+    <div class="inbox">
+      <article class="card conv-card" data-testid="conversation-list">
+        <div class="card-head"><div><h3>Percakapan</h3><p>Masuk dari WhatsApp &amp; Instagram</p></div><span class="tag">4</span></div>
+        <ul class="conv" id="convList"></ul>
+      </article>
+
+      <article class="card chat-card" data-testid="chat-thread">
+        <div class="chat-head">
+          <span class="avatar" id="chatAvatar">WS</span>
+          <div class="chat-who"><b id="chatName">Wulan Sari</b><small id="chatMeta">WhatsApp · +62 812-3344-9087</small></div>
+          <span class="badge warn" data-testid="chat-state">state: pending_approval</span>
+        </div>
+        <div class="thread" id="thread"></div>
+        <div class="draft" data-testid="draft-order">
+          <div class="draft-head">
+            <div><b>Draft order TU-2411</b><small>Dibuat otomatis oleh agent · belum mengurangi stok</small></div>
+            <span class="q-amt">Rp 348.000</span>
+          </div>
+          <ul class="draft-lines" id="draftLines"></ul>
+          <div class="draft-foot">
+            <button class="ghost-btn sm" data-testid="draft-reject">Tolak</button>
+            <button class="gold-btn sm" data-testid="draft-approve" data-id="TU-2411">Buka detail approval</button>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
   <!-- TRANSAKSI -->
   <section class="view" id="view-transaksi" data-testid="view-transaksi">
     <div class="kpi-grid three">
@@ -169,7 +204,7 @@
         <div id="barChart" class="chart"></div>
       </article>
       <article class="card" data-testid="metrics-agent">
-        <div class="card-head"><div><h3>Performa agent</h3><p>Metrik kualitas terhadap target PRD</p></div></div>
+        <div class="card-head"><div><h3>Performa agent</h3><p>Metrik kualitas terhadap target internal</p></div></div>
         <ul class="metrics" id="metricList"></ul>
       </article>
     </div>
@@ -179,6 +214,32 @@
     </article>
   </section>
 </main>
+
+<div class="modal-wrap" id="modal" data-testid="approval-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal card" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <button class="modal-x" data-close data-testid="approval-close" aria-label="Tutup">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <p class="crumb">Approval gate</p>
+    <h3 id="mTitle">Detail Approval <span id="mId">TU-2411</span></h3>
+    <div class="m-grid">
+      <div><small>Pelanggan</small><b id="mCust">Wulan Sari</b></div>
+      <div><small>Kanal</small><b>WhatsApp</b></div>
+      <div><small>Alamat kirim</small><b id="mAddr">Jl. Kaliurang 21, Sleman</b></div>
+      <div><small>Kurir</small><b>JNE REG · Rp 18.000</b></div>
+    </div>
+    <ul class="draft-lines" id="mLines"></ul>
+    <div class="m-total"><span>Total tagihan</span><b id="mTotal">Rp 348.000</b></div>
+    <ul class="m-checks" id="mChecks"></ul>
+    <div class="m-foot">
+      <button class="ghost-btn" data-close data-testid="approval-reject">Tolak order</button>
+      <button class="gold-btn" id="mApprove" data-testid="approval-approve">Setujui &amp; kirim invoice</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" data-testid="toast" hidden></div>
 
 <script src="./app.js"></script>
 </body>
