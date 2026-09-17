@@ -10,6 +10,20 @@ btn.addEventListener("click", () => {
   localStorage.setItem("tu-collapsed", body.classList.contains("collapsed") ? "1" : "0");
 });
 
+/* ---------- tema terang / gelap ---------- */
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem("tu-theme", t);
+  themeBtn.setAttribute("aria-pressed", t === "light" ? "true" : "false");
+  themeBtn.title = t === "light" ? "Beralih ke mode gelap" : "Beralih ke mode terang";
+}
+applyTheme(localStorage.getItem("tu-theme") === "light" ? "light" : "dark");
+themeBtn.addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+  toast(document.documentElement.dataset.theme === "light" ? "Mode terang aktif" : "Mode gelap aktif");
+});
+
 /* ---------- routing ---------- */
 const titles = {
   ringkasan: ["Operasional / Ringkasan", "Ringkasan Harian"],
@@ -105,7 +119,7 @@ document.getElementById("prodTable").innerHTML = `
 document.getElementById("metricList").innerHTML = metrics.map(m => `
   <li><p><span>${m[0]}</span><b>${m[1]}%</b></p>
   <div class="bar"><i style="width:${m[1]}%"></i></div>
-  <p style="margin:6px 0 0;color:#6C8480;font-size:11.5px">${m[2]}</p></li>`).join("");
+  <p class="hint">${m[2]}</p></li>`).join("");
 
 document.getElementById("repTable").innerHTML = `
   <thead><tr><th>Periode</th><th>Order</th><th>Omzet</th><th>Akurasi</th><th>Intervensi</th></tr></thead>
@@ -121,7 +135,7 @@ document.getElementById("repTable").innerHTML = `
   const pts = omzet.map((v, i) => [x(i), y(v)]);
   const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
   const grid = [0, 3, 6, 9, 12].map(v =>
-    `<line x1="${pad}" x2="${W - pad}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,.055)"/>
+    `<line class="grid-line" x1="${pad}" x2="${W - pad}" y1="${y(v)}" y2="${y(v)}"/>
      <text x="0" y="${y(v) + 3}">${v}jt</text>`).join("");
   document.getElementById("lineChart").innerHTML = `
   <svg viewBox="0 0 ${W} ${H}">
@@ -131,16 +145,16 @@ document.getElementById("repTable").innerHTML = `
         <stop offset="100%" stop-color="#2FB98A" stop-opacity="0"/>
       </linearGradient>
       <linearGradient id="strokeG" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#2FB98A"/><stop offset="100%" stop-color="#F3DFA6"/>
+        <stop class="g-a" offset="0%"/><stop class="g-b" offset="100%"/>
       </linearGradient>
     </defs>
     ${grid}
     <path d="${path} L ${x(omzet.length - 1)} ${H - pad} L ${pad} ${H - pad} Z" fill="url(#fillG)"/>
     <path d="${path}" fill="none" stroke="url(#strokeG)" stroke-width="2.6" stroke-linecap="round"/>
-    ${pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${i === 5 ? 5.5 : 3.4}"
-       fill="${i === 5 ? "#F3DFA6" : "#0B1413"}" stroke="#7FE3C0" stroke-width="2"/>`).join("")}
+    ${pts.map((p, i) => `<circle class="${i === 5 ? "dot-hi" : "dot"}" cx="${p[0]}" cy="${p[1]}" r="${i === 5 ? 5.5 : 3.4}"
+       stroke-width="2"/>`).join("")}
     ${days.map((d, i) => `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${d}</text>`).join("")}
-    <text x="${x(5)}" y="${y(omzet[5]) - 14}" text-anchor="middle" fill="#F3DFA6" font-size="11" font-weight="600">Rp 10,6 jt</text>
+    <text class="hi-label" x="${x(5)}" y="${y(omzet[5]) - 14}" text-anchor="middle">Rp 10,6 jt</text>
   </svg>`;
 })();
 
@@ -151,13 +165,13 @@ document.getElementById("repTable").innerHTML = `
   document.getElementById("barChart").innerHTML = `
   <svg viewBox="0 0 ${W} ${H}">
     <defs><linearGradient id="barG" x1="0" y1="1" x2="0" y2="0">
-      <stop offset="0%" stop-color="#1B6B54"/><stop offset="100%" stop-color="#F3DFA6"/></linearGradient></defs>
+      <stop class="g-a" offset="0%"/><stop class="g-b" offset="100%"/></linearGradient></defs>
     ${[0, 7, 14, 21, 28].map(v => { const yy = H - pad - (v / max) * (H - pad * 1.5);
-      return `<line x1="${pad}" x2="${W - pad}" y1="${yy}" y2="${yy}" stroke="rgba(255,255,255,.055)"/><text x="0" y="${yy + 3}">${v}jt</text>`; }).join("")}
+      return `<line class="grid-line" x1="${pad}" x2="${W - pad}" y1="${yy}" y2="${yy}"/><text x="0" y="${yy + 3}">${v}jt</text>`; }).join("")}
     ${data.map((d, i) => {
       const h = (d[1] / max) * (H - pad * 1.5), xx = pad + i * (bw + gap), yy = H - pad - h;
       return `<rect x="${xx}" y="${yy}" width="${bw}" height="${h}" rx="9" fill="url(#barG)" opacity=".92"/>
-        <text x="${xx + bw / 2}" y="${yy - 9}" text-anchor="middle" fill="#EAF2EF" font-size="11" font-weight="600">${d[1]}jt</text>
+        <text class="bar-val" x="${xx + bw / 2}" y="${yy - 9}" text-anchor="middle">${d[1]}jt</text>
         <text x="${xx + bw / 2}" y="${H - 14}" text-anchor="middle">${d[0]}</text>`; }).join("")}
   </svg>`;
 })();
