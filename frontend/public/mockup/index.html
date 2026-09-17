@@ -42,10 +42,11 @@
         <small>AI Agent Operasional</small>
       </span>
     </a>
-    <button class="collapse-btn" id="collapseBtn" data-testid="sidebar-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
   </div>
+
+  <button class="collapse-btn" id="collapseBtn" data-testid="sidebar-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
 
   <nav class="nav" data-testid="sidebar-nav">
     <p class="nav-label">Operasional</p>
@@ -66,6 +67,11 @@
     <a class="nav-item" href="#produk" data-view="produk" data-tip="Produk &amp; Stok" title="Produk &amp; Stok" data-testid="nav-produk">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 4 7.3v9.4l8 4.1 8-4.1V7.3zM4 7.3l8 4.1 8-4.1M12 11.4V20.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       <span>Produk &amp; Stok</span>
+    </a>
+    <a class="nav-item" href="#knowledge" data-view="knowledge" data-tip="Knowledge Base" title="Knowledge Base" data-testid="nav-knowledge">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.2A1.7 1.7 0 0 1 6.2 3.5H19v14H6.2a1.7 1.7 0 0 0-1.7 1.7zM4.5 19.2a1.7 1.7 0 0 0 1.7 1.8H19M8.5 7.6h6.5M8.5 11.2h4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Knowledge Base</span>
+      <i class="pill">RAG</i>
     </a>
     <a class="nav-item" href="#laporan" data-view="laporan" data-tip="Laporan" title="Laporan" data-testid="nav-laporan">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 20V10M12 20V4.5M17 20v-6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -202,6 +208,63 @@
       <div class="card-head"><div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div><button class="gold-btn sm">+ Produk</button></div>
       <div class="table-wrap"><table class="table" id="prodTable"></table></div>
     </article>
+  </section>
+
+  <!-- KNOWLEDGE BASE -->
+  <section class="view" id="view-knowledge" data-testid="view-knowledge">
+    <article class="card kb-banner" data-testid="kb-banner">
+      <span class="kb-banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3.2 4.5 6.4v5.3c0 4.4 3.1 8.2 7.5 9.1 4.4-.9 7.5-4.7 7.5-9.1V6.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8.8 12.2 2.4 2.4 4-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div>
+        <h3>Dokumen sumber RAG</h3>
+        <p>Satu-satunya kebenaran untuk <b>harga</b>, <b>stok</b>, dan <b>kebijakan</b>. Agent hanya menjawab dari dokumen di sini — di luar ini agent wajib bilang tidak tahu, bukan mengarang.</p>
+      </div>
+      <span class="tag jade">grounding wajib</span>
+    </article>
+
+    <div class="kpi-grid three">
+      <article class="card kpi" data-testid="kb-kpi-doc"><p class="kpi-label">Dokumen aktif</p><h2>8</h2><span class="delta up">2 diperbarui hari ini</span></article>
+      <article class="card kpi" data-testid="kb-kpi-chunk"><p class="kpi-label">Potongan terindeks</p><h2>1.284<small>chunk</small></h2><span class="delta">embedding tersinkron</span></article>
+      <article class="card kpi" data-testid="kb-kpi-ground"><p class="kpi-label">Jawaban ber-sitasi</p><h2>96<small>%</small></h2><span class="delta up">target ≥ 90%</span></article>
+    </div>
+
+    <div class="kb-grid">
+      <article class="card" data-testid="kb-doc-list">
+        <div class="card-head">
+          <div><h3>Pustaka dokumen</h3><p>Diindeks otomatis · agent membaca versi terbaru</p></div>
+          <button class="gold-btn sm" data-testid="kb-upload-btn">+ Unggah dokumen</button>
+        </div>
+        <div class="kb-tools">
+          <label class="search kb-search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <input type="text" placeholder="Cari dokumen atau isi…" data-testid="kb-search-input" />
+          </label>
+          <div class="chips kb-chips" data-testid="kb-filter-chips">
+            <button class="chip active" data-kb="semua">Semua</button>
+            <button class="chip" data-kb="Harga">Harga</button>
+            <button class="chip" data-kb="Stok">Stok</button>
+            <button class="chip" data-kb="Kebijakan">Kebijakan</button>
+          </div>
+        </div>
+        <div class="kb-drop" data-testid="kb-dropzone">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16.5V4.8m0 0L7.8 9M12 4.8 16.2 9M4.5 15v3.2A1.8 1.8 0 0 0 6.3 20h11.4a1.8 1.8 0 0 0 1.8-1.8V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <p><b>Tarik berkas ke sini</b> atau klik untuk pilih — PDF, DOCX, CSV, XLSX (maks 20 MB)</p>
+        </div>
+        <ul class="kb-docs" id="kbDocs"></ul>
+      </article>
+
+      <aside class="kb-side">
+        <article class="card" data-testid="kb-preview">
+          <div class="card-head"><div><h3 id="kbDocTitle">Daftar Harga Grosir 2025</h3><p id="kbDocMeta">Harga · v4 · diperbarui 2 jam lalu</p></div><span class="tag" id="kbDocTag">aktif</span></div>
+          <ul class="kb-chunks" id="kbChunks"></ul>
+        </article>
+        <article class="card" data-testid="kb-guardrail">
+          <div class="card-head"><div><h3>Aturan anti-halusinasi</h3><p>Berlaku untuk semua jawaban agent</p></div></div>
+          <ul class="m-checks" id="kbRules"></ul>
+        </article>
+      </aside>
+    </div>
   </section>
 
   <!-- LAPORAN -->

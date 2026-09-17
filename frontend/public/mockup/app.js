@@ -30,6 +30,7 @@ const titles = {
   inbox: ["Operasional / Inbox Chat", "Inbox Chat Pelanggan"],
   transaksi: ["Operasional / Transaksi", "Transaksi & Approval"],
   produk: ["Operasional / Produk", "Produk & Stok"],
+  knowledge: ["Operasional / Knowledge Base", "Knowledge Base Agent"],
   laporan: ["Operasional / Laporan", "Laporan & Performa"]
 };
 function go(view) {
@@ -330,3 +331,132 @@ document.addEventListener("click", e => {
   if (e.target.closest('[data-testid="draft-reject"]')) toast("Draft ditolak — agent minta konfirmasi ulang");
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") modal.hidden = true; });
+
+/* ---------- knowledge base (mockup) ---------- */
+const kbDocs = [
+  {
+    t: "Daftar Harga Grosir 2025", cat: "Harga", ext: "XLSX", v: 4, chunks: 182,
+    upd: "2 jam lalu", st: "ok", stLabel: "Terindeks",
+    chunks_txt: [
+      ["Keripik Pisang Balado — Rp 29.000/pcs (retail), Rp 27.500/pcs untuk ≥10 pcs, Rp 26.000/pcs untuk reseller ≥20 pcs.", "harga-grosir-2025.xlsx · baris 12"],
+      ["Paket Oleh-oleh Mix — Rp 155.000/paket. Tidak berlaku diskon reseller.", "harga-grosir-2025.xlsx · baris 34"],
+      ["Harga berlaku sejak 1 Juni 2025 dan menggantikan semua daftar harga sebelumnya.", "harga-grosir-2025.xlsx · catatan"]
+    ]
+  },
+  {
+    t: "Kebijakan Reseller & Diskon", cat: "Kebijakan", ext: "PDF", v: 2, chunks: 96,
+    upd: "kemarin", st: "ok", stLabel: "Terindeks",
+    chunks_txt: [
+      ["Diskon reseller 4% berlaku untuk pembelian ≥20 pcs SKU sejenis dalam satu invoice.", "kebijakan-reseller.pdf · hal 2"],
+      ["Reseller wajib melakukan pembayaran penuh sebelum barang dikirim. Tidak ada tempo.", "kebijakan-reseller.pdf · hal 3"]
+    ]
+  },
+  {
+    t: "Katalog Stok & SKU Aktif", cat: "Stok", ext: "CSV", v: 11, chunks: 324,
+    upd: "12 menit lalu", st: "ok", stLabel: "Sinkron live",
+    chunks_txt: [
+      ["KRP-01 Keripik Pisang Balado — stok 148 pcs, kapasitas 200, gudang Sleman.", "katalog-stok.csv · KRP-01"],
+      ["RNG-04 Rengginang Original — stok 11 pcs (kritis), restock masuk hari Kamis.", "katalog-stok.csv · RNG-04"]
+    ]
+  },
+  {
+    t: "SOP Pengiriman & Ongkir", cat: "Kebijakan", ext: "DOCX", v: 3, chunks: 141,
+    upd: "3 hari lalu", st: "ok", stLabel: "Terindeks",
+    chunks_txt: [
+      ["JNE REG Rp 18.000 untuk Jawa, estimasi 2–3 hari. Instant courier Rp 20.000 khusus dalam kota Yogyakarta.", "sop-pengiriman.docx · bagian 2"],
+      ["Order masuk setelah pukul 15.00 dikirim pada hari kerja berikutnya.", "sop-pengiriman.docx · bagian 4"]
+    ]
+  },
+  {
+    t: "Kebijakan Retur & Komplain", cat: "Kebijakan", ext: "PDF", v: 1, chunks: 74,
+    upd: "1 minggu lalu", st: "ok", stLabel: "Terindeks",
+    chunks_txt: [
+      ["Retur hanya diterima maks 2×24 jam setelah barang diterima dengan bukti foto kemasan.", "kebijakan-retur.pdf · hal 1"],
+      ["Penggantian barang rusak tidak mengurangi stok jual, dicatat sebagai beban kualitas.", "kebijakan-retur.pdf · hal 2"]
+    ]
+  },
+  {
+    t: "Harga Promo Ramadan (draft)", cat: "Harga", ext: "XLSX", v: 1, chunks: 0,
+    upd: "baru diunggah", st: "warn", stLabel: "Menunggu indeks",
+    chunks_txt: [["Dokumen belum diindeks — agent belum boleh memakai isi dokumen ini sebagai sumber jawaban.", "menunggu proses embedding"]]
+  },
+  {
+    t: "Daftar Harga 2024 (arsip)", cat: "Harga", ext: "PDF", v: 9, chunks: 168,
+    upd: "8 bulan lalu", st: "bad", stLabel: "Dinonaktifkan",
+    chunks_txt: [["Dokumen kedaluwarsa dan dikeluarkan dari indeks agar agent tidak menjawab dengan harga lama.", "arsip-2024.pdf"]]
+  },
+  {
+    t: "FAQ Pelanggan Toko Ratna", cat: "Stok", ext: "DOCX", v: 5, chunks: 118,
+    upd: "hari ini", st: "ok", stLabel: "Terindeks",
+    chunks_txt: [
+      ["Jika stok kosong, agent menawarkan produk pengganti sejenis dan mencatat permintaan restock.", "faq-pelanggan.docx · Q7"],
+      ["Agent tidak menjanjikan tanggal restock kecuali tercantum di katalog stok.", "faq-pelanggan.docx · Q9"]
+    ]
+  }
+];
+
+const kbList = document.getElementById("kbDocs");
+let kbFilter = "semua", kbActive = 0;
+
+function kbRender() {
+  const shown = kbDocs.map((d, i) => ({ d, i })).filter(x => kbFilter === "semua" || x.d.cat === kbFilter);
+  kbList.innerHTML = shown.map(({ d, i }) => `
+    <li data-i="${i}" class="${i === kbActive ? "active" : ""}" data-testid="kb-doc-${i}">
+      <span class="kb-ico">${d.ext}</span>
+      <span class="kb-doc-meta"><b>${d.t}</b><small>${d.cat} · v${d.v} · diperbarui ${d.upd}</small></span>
+      <span class="kb-doc-side">
+        <span class="mono">${d.chunks} chunk</span>
+        <span class="badge ${d.st}">${d.stLabel}</span>
+      </span>
+    </li>`).join("");
+  if (!shown.length) kbList.innerHTML = `<li style="justify-content:center;color:var(--muted)">Tidak ada dokumen pada kategori ini</li>`;
+}
+
+function kbPreview(i) {
+  kbActive = i;
+  const d = kbDocs[i];
+  document.getElementById("kbDocTitle").textContent = d.t;
+  document.getElementById("kbDocMeta").textContent = `${d.cat} · v${d.v} · diperbarui ${d.upd}`;
+  const tag = document.getElementById("kbDocTag");
+  tag.textContent = d.stLabel;
+  tag.className = "tag" + (d.st === "ok" ? " jade" : "");
+  document.getElementById("kbChunks").innerHTML = d.chunks_txt
+    .map(c => `<li><p>“${c[0]}”</p><small>${c[1]}</small></li>`).join("");
+  kbRender();
+}
+
+document.getElementById("kbRules").innerHTML = [
+  "Jawaban hanya diambil dari dokumen aktif di Knowledge Base",
+  "Setiap harga & stok wajib menyertakan sitasi dokumen sumber",
+  "Dokumen arsip atau belum terindeks tidak boleh dipakai",
+  "Jika informasi tidak ditemukan, agent bilang tidak tahu & minta konfirmasi pemilik"
+].map(t => `<li>${tick}<span>${t}</span></li>`).join("");
+
+kbList.addEventListener("click", e => {
+  const li = e.target.closest("li[data-i]");
+  if (li) kbPreview(+li.dataset.i);
+});
+
+document.querySelectorAll(".kb-chips .chip").forEach(c =>
+  c.addEventListener("click", () => { kbFilter = c.dataset.kb; kbRender(); }));
+
+document.querySelector('[data-testid="kb-search-input"]').addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) return kbRender();
+  kbList.innerHTML = kbDocs.map((d, i) => ({ d, i }))
+    .filter(x => (x.d.t + " " + x.d.cat + " " + x.d.chunks_txt.map(c => c[0]).join(" ")).toLowerCase().includes(q))
+    .map(({ d, i }) => `
+      <li data-i="${i}" class="${i === kbActive ? "active" : ""}" data-testid="kb-doc-${i}">
+        <span class="kb-ico">${d.ext}</span>
+        <span class="kb-doc-meta"><b>${d.t}</b><small>${d.cat} · v${d.v} · diperbarui ${d.upd}</small></span>
+        <span class="kb-doc-side"><span class="mono">${d.chunks} chunk</span><span class="badge ${d.st}">${d.stLabel}</span></span>
+      </li>`).join("")
+    || `<li style="justify-content:center;color:var(--muted)">Tidak ada hasil untuk “${q}”</li>`;
+});
+
+document.querySelector('[data-testid="kb-dropzone"]').addEventListener("click", () =>
+  toast("Mockup — unggah dokumen belum aktif"));
+document.querySelector('[data-testid="kb-upload-btn"]').addEventListener("click", () =>
+  toast("Mockup — unggah dokumen belum aktif"));
+
+kbPreview(0);
