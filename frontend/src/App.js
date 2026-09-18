@@ -337,7 +337,7 @@ export default function App() {
               </button>
               {showDatePicker && (
                 <div className="period-menu" onClick={(e) => e.stopPropagation()}>
-                  {Object.entries(PERIODS).map(([k, p]) => (
+                  {Object.entries(MOCK_PERIODS).map(([k, p]) => (
                     <button
                       key={k}
                       className={`period-opt ${period === k ? "active" : ""}`}
@@ -358,7 +358,7 @@ export default function App() {
                         const diff = Math.abs((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
                         const key = diff < 2 ? "today" : diff < 10 ? "week" : "month";
                         setPeriod(key);
-                        toast(`Tanggal ${e.target.value} → ${PERIODS[key].label}`);
+                        toast(`Tanggal ${e.target.value} → ${MOCK_PERIODS[key].label}`);
                       }}
                       className="period-date"
                       data-testid="period-date-input"
