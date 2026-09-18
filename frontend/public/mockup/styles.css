@@ -117,8 +117,8 @@ body{
 }
 .brand{display:flex;align-items:center;min-height:34px;padding-right:28px}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;min-width:0;padding-left:0}
-.logo-mark{width:30px;height:30px;flex:none;filter:drop-shadow(0 3px 10px rgba(217,169,75,.28));transition:transform .5s cubic-bezier(.2,.9,.2,1);margin-left:calc(var(--sb-icon-x) - var(--sb-pad) - 15px)}
-.logo:hover .logo-mark{transform:rotate(-8deg) scale(1.05)}
+.logo-mark{width:30px;height:30px;flex:none;transition:transform .2s ease,filter .2s ease;margin-left:calc(var(--sb-icon-x) - var(--sb-pad) - 15px)}
+.logo:hover .logo-mark{transform:scale(1.05);filter:drop-shadow(0 2px 4px rgba(16,185,129,.2))}
 .logo-text{display:flex;flex-direction:column;min-width:0;white-space:nowrap;transition:opacity .22s}
 .logo-text strong{font-family:"Fraunces",serif;font-weight:600;font-size:15px;letter-spacing:.2px;
   background:linear-gradient(100deg,#F7E6A8,#D9A94B 45%,#F3DFA6);-webkit-background-clip:text;background-clip:text;color:transparent}
