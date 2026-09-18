@@ -249,6 +249,7 @@ convList.innerHTML = convs.map((c, i) => `
   </li>`).join("");
 
 function renderConv(i) {
+  currentConv = i;
   const c = convs[i];
   document.getElementById("chatAvatar").textContent = c.ini;
   document.getElementById("chatName").textContent = c.n;
@@ -273,10 +274,164 @@ function renderConv(i) {
     draft.querySelector('[data-testid="draft-approve"]').dataset.i = i;
   }
   convList.querySelectorAll("li").forEach(li => li.classList.toggle("active", +li.dataset.i === i));
+  stepperFromConv(c);
 }
 convList.addEventListener("click", e => {
   const li = e.target.closest("li"); if (li) renderConv(+li.dataset.i);
 });
+
+/* ---------- chat stepper ---------- */
+let currentConv = 0;
+const stepperEl = document.getElementById("chatStepper");
+const STEPS = [
+  { key: "intake",        label: "Intake" },
+  { key: "understanding", label: "Understanding" },
+  { key: "grounding",     label: "Grounding" },
+  { key: "tool",          label: "Tool Call" },
+  { key: "approval",      label: "Approval" },
+  { key: "response",      label: "Response" },
+  { key: "analytics",     label: "Analytics" }
+];
+
+function renderStepper(activeIdx, tags) {
+  tags = tags || {};
+  stepperEl.innerHTML = STEPS.map((s, i) => {
+    let state = i < activeIdx ? "done" : i === activeIdx ? "active" : "";
+    const tag = tags[s.key] || "";
+    const link = i < STEPS.length - 1 ? '<span class="link" aria-hidden="true"></span>' : "";
+    return `<span class="step ${state}" data-step="${s.key}" data-testid="step-${s.key}" role="listitem">
+      <span class="dot"></span>
+      <span class="step-label">${s.label}</span>
+      ${tag ? `<span class="mini-tag">${tag}</span>` : ""}
+    </span>${link}`;
+  }).join("");
+}
+
+function stepperFromConv(c) {
+  if (c.state === "approved") {
+    renderStepper(6, { intake: "✓", understanding: "intent tanya_produk 0.92", approval: "✓", response: "✓" });
+  } else if (c.state === "answered") {
+    renderStepper(6, { intake: "✓", understanding: "intent tanya_stok 0.88", response: "✓" });
+  } else if (c.state === "understanding") {
+    renderStepper(1, { intake: "✓", understanding: "intent tanya_produk 0.92" });
+  } else if (c.state === "grounding") {
+    renderStepper(2, { intake: "✓", understanding: "intent tanya_produk 0.92" });
+  } else if (c.state === "tool_call") {
+    renderStepper(3, { intake: "✓", understanding: "intent tanya_produk 0.92" });
+  } else {
+    // default: pending_approval
+    renderStepper(4, { intake: "✓", understanding: "intent tanya_produk 0.92", approval: "⏳" });
+  }
+}
+
+/* ---------- composer (Enter kirim, quick replies, tool simulation) ---------- */
+const composerInput = document.getElementById("chatComposerInput");
+const sendBtn = document.getElementById("chatSendBtn");
+const quickReplies = document.getElementById("quickReplies");
+
+function autoGrow() {
+  composerInput.style.height = "auto";
+  composerInput.style.height = Math.min(composerInput.scrollHeight, 140) + "px";
+}
+composerInput.addEventListener("input", autoGrow);
+composerInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+sendBtn.addEventListener("click", sendMessage);
+quickReplies.addEventListener("click", e => {
+  const b = e.target.closest("[data-q]");
+  if (!b) return;
+  composerInput.value = b.dataset.q;
+  autoGrow();
+  composerInput.focus();
+});
+
+function nowHM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+/* parse qty & sku hint dari isi pesan */
+function parseIntent(txt) {
+  const t = txt.toLowerCase();
+  const qtyMatch = t.match(/(\d{1,3})\s*(pcs|box|paket|kaos|biji|item)?/);
+  const qty = qtyMatch ? Math.max(1, Math.min(999, parseInt(qtyMatch[1], 10))) : 3;
+  let sku = { code: "KRP-01", name: "Keripik Pisang Balado", unit: 27500 };
+  if (/roa|sambal/.test(t))     sku = { code: "SRO-02", name: "Sambal Roa Pedas",       unit: 65000 };
+  else if (/kacang/.test(t))    sku = { code: "KCT-03", name: "Kacang Telur Gurih",     unit: 27000 };
+  else if (/rengginang/.test(t))sku = { code: "RNG-04", name: "Rengginang Original",    unit: 29000 };
+  else if (/tempe/.test(t))     sku = { code: "KTP-05", name: "Keripik Tempe Original", unit: 27000 };
+  else if (/paket|oleh/.test(t))sku = { code: "PKO-06", name: "Paket Oleh-oleh Mix",    unit: 155000 };
+  const stok = { "KRP-01":148,"SRO-02":24,"KCT-03":96,"RNG-04":11,"KTP-05":212,"PKO-06":8 }[sku.code];
+  return { qty, sku, stok };
+}
+
+function updateQueueForConv(c) {
+  const list = document.getElementById("queueList");
+  const idx = convs.indexOf(c);
+  const inner = `
+    <span class="dot"></span>
+    <span class="q-meta"><b>${c.n}</b><small>Draft baru · ${c.id}</small></span>
+    <span class="q-amt">${c.total ? rp(c.total) : "—"}</span>`;
+  const existing = list.querySelector(`li[data-conv="${c.id}"]`);
+  if (existing) { existing.innerHTML = inner; return; }
+  const li = document.createElement("li");
+  li.setAttribute("data-testid", "queue-item");
+  li.setAttribute("data-conv", c.id);
+  li.setAttribute("data-i", String(idx));
+  li.style.cursor = "pointer";
+  li.innerHTML = inner;
+  list.prepend(li);
+}
+
+function sendMessage() {
+  const val = composerInput.value.trim();
+  if (!val) return;
+  const c = convs[currentConv];
+  const t = nowHM();
+  const { qty, sku, stok } = parseIntent(val);
+  const subtotal = qty * sku.unit;
+  const ongkir = 18000;
+  const total = subtotal + ongkir;
+
+  // 1. Push pesan pelanggan
+  c.thread.push(["cust", val, t]);
+  c.last = val; c.time = t; c.unread = 0;
+  c.state = "understanding";
+  composerInput.value = "";
+  autoGrow();
+  renderConv(currentConv);
+  renderStepper(1, { intake: "✓", understanding: `intent tanya_produk 0.92` });
+
+  // 2. check_stock
+  setTimeout(() => {
+    c.thread.push(["tool", `check_stock(sku=${sku.code}) → tersedia ${stok} pcs`, ""]);
+    c.state = "grounding";
+    renderConv(currentConv);
+    renderStepper(2, { intake: "✓", understanding: "intent tanya_produk 0.92" });
+  }, 550);
+
+  // 3. calculate_total
+  setTimeout(() => {
+    c.thread.push(["tool", `calculate_total(qty=${qty}, sku=${sku.code}) → ${rp(subtotal)} · ongkir JNE REG ${rp(ongkir)}`, ""]);
+    c.state = "tool_call";
+    renderConv(currentConv);
+    renderStepper(3, { intake: "✓", understanding: "intent tanya_produk 0.92" });
+  }, 1050);
+
+  // 4. create_draft_order + update queue + toast
+  setTimeout(() => {
+    c.total = total;
+    c.lines = [[`${sku.name} · ${qty} pcs`, subtotal], ["Ongkir JNE REG", ongkir]];
+    c.state = "pending_approval";
+    c.thread.push(["tool", `create_draft_order(idempotency_key=wa-${c.id || "NEW"}-${t.replace(":","")}) → draft ${c.id} menunggu approval pemilik`, ""]);
+    renderConv(currentConv);
+    renderStepper(4, { intake: "✓", understanding: "intent tanya_produk 0.92", approval: "⏳" });
+    updateQueueForConv(c);
+    toast(`Draft ${c.id} · ${rp(total)} · menunggu approval`);
+  }, 1600);
+}
+
 renderConv(0);
 
 /* ---------- detail approval modal ---------- */

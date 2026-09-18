@@ -149,7 +149,19 @@
           <div class="chat-who"><b id="chatName">Wulan Sari</b><small id="chatMeta">WhatsApp · +62 812-3344-9087</small></div>
           <span class="badge warn" data-testid="chat-state">state: pending_approval</span>
         </div>
+        <div class="chat-stepper" id="chatStepper" data-testid="chat-stepper" role="list" aria-label="Progress agent"></div>
         <div class="thread" id="thread"></div>
+        <div class="composer" data-testid="chat-composer">
+          <div class="quick-replies" id="quickReplies" data-testid="quick-replies">
+            <button class="chip" type="button" data-q="Mau 3 kaos L" data-testid="quick-reply-0">Mau 3 kaos L</button>
+            <button class="chip" type="button" data-q="Ready ijo?" data-testid="quick-reply-1">Ready ijo?</button>
+            <button class="chip" type="button" data-q="Cek stok" data-testid="quick-reply-2">Cek stok</button>
+          </div>
+          <div class="composer-row">
+            <textarea id="chatComposerInput" data-testid="chat-composer-input" rows="1" placeholder="Tulis pesan sebagai pelanggan… (Enter untuk kirim, Shift+Enter baris baru)"></textarea>
+            <button type="button" class="gold-btn" id="chatSendBtn" data-testid="chat-send-btn">Kirim</button>
+          </div>
+        </div>
         <div class="draft" data-testid="draft-order">
           <div class="draft-head">
             <div><b>Draft order TU-2411</b><small>Dibuat otomatis oleh agent · belum mengurangi stok</small></div>
