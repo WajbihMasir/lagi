@@ -58,13 +58,13 @@ const queue = [
 ];
 
 const trx = [
-  ["TU-2411", "Wulan Sari", "Keripik Pisang Balado ×12", 348000, "warn", "Pending approval", "09:42"],
-  ["TU-2410", "Andi Pratama", "Sambal Roa ×3 box", 195000, "warn", "Pending approval", "09:18"],
-  ["TU-2409", "Toko Berkah", "Kacang Telur ×20", 540000, "warn", "Pending approval", "08:55"],
-  ["TU-2408", "Nabila Putri", "Rengginang ×6", 174000, "ok", "Terkonfirmasi", "08:31"],
-  ["TU-2407", "Hendra Wijaya", "Keripik Tempe ×10", 270000, "ok", "Terkonfirmasi", "08:04"],
-  ["TU-2406", "Rizky Hidayat", "Retur kemasan rusak", -62000, "bad", "Ditolak agent", "07:47"],
-  ["TU-2405", "Sinta Maulida", "Paket Oleh-oleh ×2", 310000, "ok", "Terkonfirmasi", "07:22"]
+  ["TU-2411", "Wulan Sari",    "Keripik Pisang Balado ×12", 348000, "warn", "Pending approval",   2,  false, "wa-9087-0942"],
+  ["TU-2410", "Andi Pratama",  "Sambal Roa ×3 box",         195000, "warn", "Pending approval",   26, true,  "wa-2210-0918"],
+  ["TU-2409", "Toko Berkah",   "Kacang Telur ×20",          540000, "warn", "Pending approval",   49, false, "wa-3390-0855"],
+  ["TU-2408", "Nabila Putri",  "Rengginang ×6",             174000, "ok",   "Terkonfirmasi",      73, false, "wa-1188-0831"],
+  ["TU-2407", "Hendra Wijaya", "Keripik Tempe ×10",         270000, "ok",   "Terkonfirmasi",      100,true,  "wa-4423-0804"],
+  ["TU-2406", "Rizky Hidayat", "Retur kemasan rusak",       -62000, "bad",  "Ditolak agent",      117,false, "wa-9917-0747"],
+  ["TU-2405", "Sinta Maulida", "Paket Oleh-oleh ×2",        310000, "ok",   "Terkonfirmasi",      142,false, "wa-2044-0722"]
 ];
 
 const prod = [
@@ -98,12 +98,45 @@ document.getElementById("queueList").innerHTML = queue.map((q, i) => `
     <span class="q-amt">${q.a === 0 ? "—" : rp(q.a)}</span>
   </li>`).join("");
 
-document.getElementById("trxTable").innerHTML = `
-  <thead><tr><th>ID</th><th>Pelanggan</th><th>Ringkasan order</th><th>Nilai</th><th>Status</th><th>Jam</th></tr></thead>
-  <tbody>${trx.map(r => `<tr>
-    <td class="mono">${r[0]}</td><td class="strong">${r[1]}</td><td>${r[2]}</td>
-    <td class="strong">${rp(r[3])}</td><td><span class="badge ${r[4]}">${r[5]}</span></td>
-    <td class="mono">${r[6]}</td></tr>`).join("")}</tbody>`;
+/* ---------- transaksi table (filterable) ---------- */
+const trxTableEl = document.getElementById("trxTable");
+let trxFilter = "all";
+
+function relTime(m) {
+  if (m < 1) return "baru saja";
+  if (m < 60) return m + "m lalu";
+  const h = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${h}j ${mm}m lalu` : `${h}j lalu`;
+}
+
+const idempIcon = `<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true" style="flex:none"><path d="M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+function renderTrx() {
+  const rows = trx.filter(r => trxFilter === "all" || r[4] === trxFilter);
+  const body = rows.length
+    ? rows.map(r => `<tr data-testid="trx-row-${r[0]}" data-id="${r[0]}" data-status="${r[4]}">
+        <td class="mono">${r[0]}${r[7] ? `<span class="badge idem" data-testid="trx-idem-badge" title="idempotency key: ${r[8]}">${idempIcon}<span>idempotency key aktif</span></span>` : ""}</td>
+        <td class="strong">${r[1]}</td>
+        <td>${r[2]}</td>
+        <td class="strong">${rp(r[3])}</td>
+        <td><span class="badge ${r[4]}">${r[5]}</span></td>
+        <td class="mono" data-testid="trx-time-${r[0]}">${relTime(r[6])}</td>
+      </tr>`).join("")
+    : `<tr data-testid="trx-empty"><td colspan="6" style="text-align:center;color:var(--muted);padding:18px 12px">Tidak ada transaksi pada filter ini</td></tr>`;
+  trxTableEl.innerHTML = `
+    <thead><tr><th>ID</th><th>Pelanggan</th><th>Ringkasan order</th><th>Nilai</th><th>Status</th><th>Waktu</th></tr></thead>
+    <tbody>${body}</tbody>`;
+}
+renderTrx();
+
+/* update transaksi row status locally (called after approve/reject in modal) */
+function updateTrxByConvId(id, badgeCls, label) {
+  const idx = trx.findIndex(r => r[0] === id);
+  if (idx < 0) return;
+  trx[idx][4] = badgeCls;
+  trx[idx][5] = label;
+  renderTrx();
+}
 
 document.getElementById("prodTable").innerHTML = `
   <thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th></tr></thead>
@@ -177,11 +210,15 @@ document.getElementById("repTable").innerHTML = `
   </svg>`;
 })();
 
-/* filter chips (visual only) */
+/* filter chips: transaksi has real filter, others are visual toggle */
 document.querySelectorAll(".chips .chip").forEach(c =>
   c.addEventListener("click", () => {
     c.parentElement.querySelectorAll(".chip").forEach(o => o.classList.remove("active"));
     c.classList.add("active");
+    if (c.parentElement.id === "trxChips") {
+      trxFilter = c.dataset.filter || "all";
+      renderTrx();
+    }
   }));
 
 /* ---------- inbox chat ---------- */
@@ -256,7 +293,7 @@ function renderConv(i) {
   document.getElementById("chatMeta").textContent = `${c.ch} · ${c.phone}`;
   const st = document.querySelector('[data-testid="chat-state"]');
   st.textContent = "state: " + c.state;
-  st.className = "badge " + (c.state === "pending_approval" ? "warn" : "ok");
+  st.className = "badge " + (c.state === "pending_approval" ? "warn" : c.state === "rejected" ? "bad" : "ok");
 
   document.getElementById("thread").innerHTML = c.thread.map(m =>
     m[0] === "tool"
@@ -439,15 +476,104 @@ const modal = document.getElementById("modal");
 const toastEl = document.getElementById("toast");
 const tick = `<svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
+/* modal state for countdown & qty edits */
+let mState = { convIdx: -1, openedAt: 0, timer: null, lines: [], ongkir: 0 };
+
+function parseQtyFromLabel(label) {
+  const m = label.match(/·\s*(\d+)\s*(pcs|box|paket|kaos|biji|item)/i);
+  return m ? { qty: parseInt(m[1], 10), unit: m[2], base: label.replace(m[0], "").trim() } : null;
+}
+
+function fmtCountdown(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}
+
+function stopCountdown() {
+  if (mState.timer) { clearInterval(mState.timer); mState.timer = null; }
+}
+
+function tickCountdown() {
+  const elapsedSec = Math.floor((Date.now() - mState.openedAt) / 1000);
+  const elapsedMin = elapsedSec / 60;
+  document.getElementById("mCountdownTime").textContent = fmtCountdown(elapsedSec);
+  const fill = document.getElementById("mCountdownFill");
+  fill.style.width = Math.min(100, (elapsedMin / 60) * 100) + "%";
+  const stage = document.getElementById("mCountdownStage");
+  const timeoutBadge = document.getElementById("mTimeoutBadge");
+  fill.className = "";
+  if (elapsedMin >= 60) {
+    stage.textContent = "auto-hold aktif";
+    stage.className = "badge bad";
+    fill.style.background = "linear-gradient(90deg,#B4543F,var(--danger))";
+    timeoutBadge.hidden = false;
+  } else if (elapsedMin >= 30) {
+    stage.textContent = "customer notice terkirim";
+    stage.className = "badge warn";
+    fill.style.background = "linear-gradient(90deg,var(--gold-dim,#B08A38),var(--gold,#D9A94B))";
+    timeoutBadge.hidden = true;
+  } else if (elapsedMin >= 15) {
+    stage.textContent = "reminder ke pemilik";
+    stage.className = "badge warn";
+    fill.style.background = "linear-gradient(90deg,var(--gold-dim,#B08A38),var(--gold,#D9A94B))";
+    timeoutBadge.hidden = true;
+  } else {
+    stage.textContent = "menunggu approval";
+    stage.className = "badge";
+    fill.style.background = "linear-gradient(90deg,var(--jade-dim),var(--jade))";
+    timeoutBadge.hidden = true;
+  }
+}
+
+function recomputeModalTotal() {
+  let sum = 0;
+  mState.lines.forEach(l => { sum += l.qty * l.unitPrice; });
+  sum += mState.ongkir;
+  document.getElementById("mTotal").textContent = rp(sum);
+}
+
+function renderModalLines() {
+  const html = mState.lines.map((l, i) => l.editable
+    ? `<li data-testid="mline-${i}">
+         <span class="mline-name">${l.base}</span>
+         <span class="mline-qty">
+           <button type="button" class="qty-btn" data-qstep="-1" data-i="${i}" data-testid="mline-qty-dec-${i}" aria-label="Kurangi">−</button>
+           <input type="number" min="0" max="999" value="${l.qty}" class="qty-input" data-i="${i}" data-testid="mline-qty-${i}" aria-label="Ubah jumlah" />
+           <button type="button" class="qty-btn" data-qstep="1" data-i="${i}" data-testid="mline-qty-inc-${i}" aria-label="Tambah">+</button>
+           <small class="mline-unit">${l.unit}</small>
+         </span>
+         <span class="mline-sub" data-testid="mline-sub-${i}">${rp(l.qty * l.unitPrice)}</span>
+       </li>`
+    : `<li data-testid="mline-${i}"><span class="mline-name">${l.base}</span><span class="mline-sub">${rp(l.qty * l.unitPrice)}</span></li>`
+  ).join("");
+  document.getElementById("mLines").innerHTML = html;
+  recomputeModalTotal();
+}
+
 function openApproval(i) {
   const c = convs[i];
+  mState.convIdx = i;
   document.getElementById("mId").textContent = c.id;
   document.getElementById("mCust").textContent = c.n;
   document.getElementById("mAddr").textContent = c.addr;
   document.querySelectorAll(".m-grid b")[1].textContent = c.ch;
-  document.getElementById("mTotal").textContent = rp(c.total);
-  document.getElementById("mLines").innerHTML =
-    c.lines.map(l => `<li><span>${l[0]}</span><span>${rp(l[1])}</span></li>`).join("");
+
+  // Build editable lines from c.lines
+  mState.lines = [];
+  mState.ongkir = 0;
+  c.lines.forEach(l => {
+    const parsed = parseQtyFromLabel(l[0]);
+    if (parsed && parsed.qty > 0) {
+      mState.lines.push({ base: parsed.base, qty: parsed.qty, unit: parsed.unit, unitPrice: Math.round(l[1] / parsed.qty), editable: true });
+    } else if (/ongkir/i.test(l[0])) {
+      mState.ongkir += l[1];
+      mState.lines.push({ base: l[0], qty: 1, unit: "", unitPrice: l[1], editable: false });
+    } else {
+      mState.lines.push({ base: l[0], qty: 1, unit: "", unitPrice: l[1], editable: false });
+    }
+  });
+  renderModalLines();
+
   document.getElementById("mChecks").innerHTML = [
     "Stok tersedia & terverifikasi dari katalog",
     "Harga cocok dengan kebijakan toko",
@@ -455,12 +581,52 @@ function openApproval(i) {
     "Stok baru berkurang setelah Anda menyetujui"
   ].map(t => `<li>${tick}<span>${t}</span></li>`).join("");
   document.getElementById("mApprove").dataset.i = i;
+
+  // Reset reject box
+  document.getElementById("mReject").hidden = true;
+  document.getElementById("mRejectReason").value = "";
+  document.getElementById("mRejectBtn").textContent = "Tolak order";
+  document.getElementById("mRejectBtn").classList.remove("confirm-reject");
+
+  // Start countdown
+  document.getElementById("mTimeoutBadge").hidden = true;
+  stopCountdown();
+  mState.openedAt = Date.now();
+  tickCountdown();
+  mState.timer = setInterval(tickCountdown, 1000);
+
   modal.hidden = false;
 }
+
+function closeModal() {
+  modal.hidden = true;
+  stopCountdown();
+}
+
 function toast(msg) {
   toastEl.textContent = msg; toastEl.hidden = false;
   clearTimeout(toast.t); toast.t = setTimeout(() => (toastEl.hidden = true), 2600);
 }
+
+/* qty input handler (modify qty updates mTotal) */
+document.getElementById("mLines").addEventListener("input", e => {
+  const inp = e.target.closest(".qty-input");
+  if (!inp) return;
+  const i = +inp.dataset.i;
+  const v = Math.max(0, Math.min(999, parseInt(inp.value || "0", 10)));
+  mState.lines[i].qty = v;
+  document.querySelector(`[data-testid="mline-sub-${i}"]`).textContent = rp(v * mState.lines[i].unitPrice);
+  recomputeModalTotal();
+});
+document.getElementById("mLines").addEventListener("click", e => {
+  const b = e.target.closest(".qty-btn");
+  if (!b) return;
+  const i = +b.dataset.i, step = +b.dataset.qstep;
+  const inp = document.querySelector(`.qty-input[data-i="${i}"]`);
+  const v = Math.max(0, Math.min(999, (parseInt(inp.value || "0", 10)) + step));
+  inp.value = v;
+  inp.dispatchEvent(new Event("input", { bubbles: true }));
+});
 
 document.addEventListener("click", e => {
   const approveBtn = e.target.closest('[data-testid="draft-approve"]');
@@ -471,21 +637,56 @@ document.addEventListener("click", e => {
 
   if (e.target.closest('[data-testid="approve-all-btn"]')) { location.hash = "#inbox"; renderConv(0); openApproval(0); return; }
 
-  if (e.target.closest("[data-close]")) {
-    modal.hidden = true;
-    if (e.target.closest('[data-testid="approval-reject"]')) toast("Order ditolak — pelanggan dikabari agent");
+  // approve
+  if (e.target.closest("#mApprove")) {
+    const i = +e.target.closest("#mApprove").dataset.i;
+    const c = convs[i];
+    // Sync total from modal edits back to conversation
+    let sum = 0;
+    mState.lines.forEach(l => sum += l.qty * l.unitPrice);
+    c.total = sum;
+    c.state = "approved";
+    updateTrxByConvId(c.id, "ok", "Terkonfirmasi");
+    renderConv(convs.indexOf(c));
+    closeModal();
+    toast(`Order ${c.id} disetujui · invoice terkirim`);
     return;
   }
-  if (e.target.closest("#mApprove")) {
-    const c = convs[+e.target.closest("#mApprove").dataset.i];
-    modal.hidden = true;
-    c.state = "approved";
+
+  // reject inside modal → two-step: show textarea then confirm
+  const mRejectBtn = e.target.closest('#mRejectBtn');
+  if (mRejectBtn) {
+    const box = document.getElementById("mReject");
+    if (box.hidden) {
+      box.hidden = false;
+      mRejectBtn.textContent = "Konfirmasi tolak";
+      mRejectBtn.classList.add("confirm-reject");
+      document.getElementById("mRejectReason").focus();
+      return;
+    }
+    const reason = document.getElementById("mRejectReason").value.trim();
+    const c = convs[mState.convIdx];
+    c.state = "rejected";
+    updateTrxByConvId(c.id, "bad", "Ditolak pemilik");
     renderConv(convs.indexOf(c));
-    toast(`Order ${c.id} disetujui · invoice terkirim`);
+    closeModal();
+    toast(reason ? `Order ${c.id} ditolak · alasan: ${reason.slice(0, 60)}` : `Order ${c.id} ditolak — pelanggan dikabari agent`);
+    return;
   }
-  if (e.target.closest('[data-testid="draft-reject"]')) toast("Draft ditolak — agent minta konfirmasi ulang");
+
+  // backdrop / X close
+  if (e.target.closest("[data-close]")) { closeModal(); return; }
+
+  // draft-reject (di panel chat)
+  if (e.target.closest('[data-testid="draft-reject"]')) {
+    const c = convs[currentConv];
+    c.state = "rejected";
+    updateTrxByConvId(c.id, "bad", "Ditolak pemilik");
+    renderConv(currentConv);
+    toast("Draft ditolak — agent minta konfirmasi ulang");
+  }
 });
-document.addEventListener("keydown", e => { if (e.key === "Escape") modal.hidden = true; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 /* ---------- knowledge base (mockup) ---------- */
 const kbDocs = [

@@ -187,8 +187,8 @@
     <article class="card" data-testid="table-transaksi">
       <div class="card-head">
         <div><h3>Daftar transaksi</h3><p>Hasil ekstraksi otomatis dari percakapan pelanggan</p></div>
-        <div class="chips">
-          <button class="chip active">Semua</button><button class="chip">Pending</button><button class="chip">Terkonfirmasi</button>
+        <div class="chips" id="trxChips" data-testid="trx-filter-chips">
+          <button class="chip active" data-filter="all" data-testid="trx-filter-all">Semua</button><button class="chip" data-filter="warn" data-testid="trx-filter-pending">Pending</button><button class="chip" data-filter="ok" data-testid="trx-filter-terkonfirmasi">Terkonfirmasi</button>
         </div>
       </div>
       <div class="table-wrap"><table class="table" id="trxTable"></table></div>
@@ -291,18 +291,34 @@
       <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
     <p class="crumb">Approval gate</p>
-    <h3 id="mTitle">Detail Approval <span id="mId">TU-2411</span></h3>
+    <h3 id="mTitle">Detail Approval <span id="mId">TU-2411</span> <span class="badge warn" id="mTimeoutBadge" data-testid="approval-timeout-badge" hidden>approval_timeout</span></h3>
     <div class="m-grid">
       <div><small>Pelanggan</small><b id="mCust">Wulan Sari</b></div>
       <div><small>Kanal</small><b>WhatsApp</b></div>
       <div><small>Alamat kirim</small><b id="mAddr">Jl. Kaliurang 21, Sleman</b></div>
       <div><small>Kurir</small><b>JNE REG · Rp 18.000</b></div>
     </div>
+    <div class="m-countdown" data-testid="approval-countdown">
+      <div class="m-countdown-head">
+        <span class="m-countdown-label"><b id="mCountdownTime" data-testid="approval-countdown-time">00:00</b> <small>berjalan sejak draft dibuat</small></span>
+        <span class="badge" id="mCountdownStage" data-testid="approval-countdown-stage">menunggu approval</span>
+      </div>
+      <div class="bar m-countdown-bar"><i id="mCountdownFill" style="width:0%"></i></div>
+      <div class="m-countdown-ticks">
+        <span data-testid="tick-reminder">15m · reminder</span>
+        <span data-testid="tick-customer">30m · customer notice</span>
+        <span data-testid="tick-hold">60m · auto-hold</span>
+      </div>
+    </div>
     <ul class="draft-lines" id="mLines"></ul>
     <div class="m-total"><span>Total tagihan</span><b id="mTotal">Rp 348.000</b></div>
     <ul class="m-checks" id="mChecks"></ul>
+    <div class="m-reject" id="mReject" data-testid="approval-reject-box" hidden>
+      <label for="mRejectReason"><small>Alasan tolak (opsional, dikirim ke pelanggan lewat agent)</small></label>
+      <textarea id="mRejectReason" data-testid="approval-reject-reason" rows="2" placeholder="Contoh: stok habis, harga sudah naik, alamat di luar jangkauan…"></textarea>
+    </div>
     <div class="m-foot">
-      <button class="ghost-btn" data-close data-testid="approval-reject">Tolak order</button>
+      <button class="ghost-btn" id="mRejectBtn" data-testid="approval-reject">Tolak order</button>
       <button class="gold-btn" id="mApprove" data-testid="approval-approve">Setujui &amp; kirim invoice</button>
     </div>
   </div>

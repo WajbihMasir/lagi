@@ -295,6 +295,7 @@ html[data-theme="light"] .theme-btn .i-moon{opacity:0;transform:rotate(90deg) sc
 .table .mono{font-variant-numeric:tabular-nums;color:var(--muted);font-size:11.5px}
 .table .strong{font-weight:600;color:var(--text-strong)}
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.badge[hidden]{display:none}
 .badge.warn{background:rgba(217,169,75,.14);color:var(--gold-text)}
 .badge.ok{background:rgba(47,185,138,.14);color:var(--jade-text)}
 .badge.bad{background:rgba(224,113,95,.14);color:var(--danger-text)}
@@ -370,6 +371,40 @@ html[data-theme="light"] .msg.agent{background:linear-gradient(140deg,rgba(15,13
 .m-checks li{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-soft)}
 .m-checks svg{width:14px;height:14px;flex:none;color:var(--jade)}
 .m-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+/* ---------- modal: countdown ---------- */
+.m-countdown{margin:12px 0 10px;padding:10px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line-soft)}
+.m-countdown-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px}
+.m-countdown-label b{font-variant-numeric:tabular-nums;font-size:14px;color:var(--text-strong)}
+.m-countdown-label small{margin-left:6px;font-size:11px;color:var(--muted)}
+.m-countdown-bar{margin:2px 0 6px;height:5px;border-radius:99px;background:var(--track);overflow:hidden}
+.m-countdown-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--jade-dim),var(--jade));transition:width .5s ease,background .3s ease}
+.m-countdown-ticks{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.06em;color:var(--muted-2);text-transform:uppercase}
+.modal h3 .badge{margin-left:8px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;vertical-align:middle}
+
+/* ---------- modal: qty inputs on draft lines ---------- */
+#mLines li{display:flex;align-items:center;gap:10px;padding:8px 4px;border-top:1px solid var(--line-soft);font-size:12.5px}
+#mLines li:first-child{border-top:none}
+.mline-name{flex:1;min-width:0;color:var(--text-soft)}
+.mline-qty{display:inline-flex;align-items:center;gap:5px}
+.mline-qty .qty-btn{width:22px;height:22px;border-radius:7px;border:1px solid var(--line-soft);background:var(--soft);color:var(--text-soft);cursor:pointer;font-size:13px;line-height:1;display:grid;place-items:center;transition:background-color .2s,color .2s}
+.mline-qty .qty-btn:hover{background:var(--soft-hover);color:var(--text-strong)}
+.mline-qty .qty-input{width:46px;height:24px;text-align:center;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel,transparent);color:var(--text-strong);font-variant-numeric:tabular-nums;font-size:12.5px;padding:0 4px;outline:none;transition:border-color .2s,box-shadow .2s}
+.mline-qty .qty-input:focus{border-color:rgba(217,169,75,.55);box-shadow:0 0 0 3px rgba(217,169,75,.15)}
+.mline-qty .qty-input::-webkit-inner-spin-button,.mline-qty .qty-input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.mline-unit{color:var(--muted-2);font-size:10.5px;margin-left:2px}
+.mline-sub{font-variant-numeric:tabular-nums;color:var(--text-strong);font-weight:600;min-width:96px;text-align:right}
+
+/* ---------- modal: reject textarea ---------- */
+.m-reject{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(224,113,95,.06);border:1px solid rgba(224,113,95,.28);animation:pop .3s cubic-bezier(.2,.9,.2,1) both}
+.m-reject label small{display:block;margin-bottom:6px;color:var(--danger-text);font-size:11px;letter-spacing:.02em}
+.m-reject textarea{width:100%;resize:vertical;min-height:48px;padding:8px 10px;border-radius:9px;border:1px solid rgba(224,113,95,.35);background:var(--panel,transparent);color:var(--text-strong);font-size:12.5px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.m-reject textarea:focus{border-color:rgba(224,113,95,.6);box-shadow:0 0 0 3px rgba(224,113,95,.14)}
+#mRejectBtn.confirm-reject{background:rgba(224,113,95,.14);color:var(--danger-text);border-color:rgba(224,113,95,.4)}
+
+/* ---------- transaksi idempotency badge ---------- */
+.badge.idem{margin-left:6px;background:rgba(217,169,75,.14);color:var(--gold-text);font-size:10px;letter-spacing:.02em;padding:2px 7px;vertical-align:middle}
+.badge.idem svg{width:11px;height:11px}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:80;
   padding:10px 18px;border-radius:999px;font-size:12.5px;font-weight:500;color:#0A1512;
