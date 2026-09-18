@@ -138,17 +138,24 @@ function updateTrxByConvId(id, badgeCls, label) {
   renderTrx();
 }
 
-document.getElementById("prodTable").innerHTML = `
+/* ---------- produk table (re-renderable) ---------- */
+function renderProd() {
+  document.getElementById("prodTable").innerHTML = `
   <thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th></tr></thead>
   <tbody>${prod.map(p => {
     const pct = Math.round((p[4] / p[5]) * 100), low = pct < 20;
-    return `<tr>
-      <td class="mono">${p[0]}</td><td class="strong">${p[1]}</td><td class="mono">${p[2]}</td>
+    const variants = p[6] && p[6].length ? `<small class="prod-variants">${p[6].join(" · ")}</small>` : "";
+    return `<tr data-testid="prod-row-${p[0]}">
+      <td class="mono">${p[0]}</td>
+      <td class="strong">${p[1]}${variants}</td>
+      <td class="mono">${p[2]}</td>
       <td>${rp(p[3])}</td>
       <td><div class="stockbar ${low ? "low" : ""}"><i style="width:${Math.min(pct,100)}%"></i></div>
           <span class="mono">${p[4]} / ${p[5]} pcs</span></td>
       <td><span class="badge ${low ? "bad" : "ok"}">${low ? "Stok kritis" : "Aman"}</span></td></tr>`;
   }).join("")}</tbody>`;
+}
+renderProd();
 
 document.getElementById("metricList").innerHTML = metrics.map(m => `
   <li><p><span>${m[0]}</span><b>${m[1]}%</b></p>
@@ -810,9 +817,189 @@ document.querySelector('[data-testid="kb-search-input"]').addEventListener("inpu
     || `<li style="justify-content:center;color:var(--muted)">Tidak ada hasil untuk “${q}”</li>`;
 });
 
-document.querySelector('[data-testid="kb-dropzone"]').addEventListener("click", () =>
-  toast("Mockup — unggah dokumen belum aktif"));
-document.querySelector('[data-testid="kb-upload-btn"]').addEventListener("click", () =>
-  toast("Mockup — unggah dokumen belum aktif"));
+/* ---------- KB: search with citation highlight ---------- */
+let kbQuery = "";
+function highlight(text, q) {
+  if (!q) return text;
+  const re = new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
+  return text.replace(re, '<mark class="kb-hi" data-testid="kb-highlight">$1</mark>');
+}
+
+function kbRenderChunks(d) {
+  document.getElementById("kbChunks").innerHTML = d.chunks_txt
+    .map(c => `<li data-testid="kb-chunk">
+      <p>&ldquo;${highlight(c[0], kbQuery)}&rdquo;</p>
+      <small class="kb-citation" data-testid="kb-citation">${highlight(c[1], kbQuery)}</small>
+    </li>`).join("");
+}
+
+// Wrap kbPreview to also use current query for highlight
+const _origKbPreview = kbPreview;
+kbPreview = function(i) {
+  kbActive = i;
+  const d = kbDocs[i];
+  document.getElementById("kbDocTitle").innerHTML = highlight(d.t, kbQuery);
+  document.getElementById("kbDocMeta").textContent = `${d.cat} · v${d.v} · diperbarui ${d.upd}`;
+  const tag = document.getElementById("kbDocTag");
+  tag.textContent = d.stLabel;
+  tag.className = "tag" + (d.st === "ok" ? " jade" : "");
+  kbRenderChunks(d);
+  kbRender();
+};
+
+// Re-wire search input to also update preview highlight & auto-focus first match
+const kbSearchInput = document.querySelector('[data-testid="kb-search-input"]');
+kbSearchInput.replaceWith(kbSearchInput.cloneNode(true));
+const kbSearchInput2 = document.querySelector('[data-testid="kb-search-input"]');
+kbSearchInput2.addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  kbQuery = q;
+  if (!q) { kbRender(); kbRenderChunks(kbDocs[kbActive]); return; }
+  const matches = kbDocs.map((d, i) => ({ d, i }))
+    .filter(x => (x.d.t + " " + x.d.cat + " " + x.d.chunks_txt.map(c => c[0] + " " + c[1]).join(" ")).toLowerCase().includes(q));
+  kbList.innerHTML = matches.map(({ d, i }) => `
+      <li data-i="${i}" class="${i === kbActive ? "active" : ""}" data-testid="kb-doc-${i}">
+        <span class="kb-ico">${d.ext}</span>
+        <span class="kb-doc-meta"><b>${highlight(d.t, q)}</b><small>${d.cat} · v${d.v} · diperbarui ${d.upd}</small></span>
+        <span class="kb-doc-side"><span class="mono">${d.chunks} chunk</span><span class="badge ${d.st}">${d.stLabel}</span></span>
+      </li>`).join("")
+    || `<li style="justify-content:center;color:var(--muted)">Tidak ada hasil untuk &ldquo;${q}&rdquo;</li>`;
+  // Auto-jump preview to first matching doc that contains query in chunks
+  const firstDeep = matches.find(({ d }) => d.chunks_txt.some(c => (c[0] + " " + c[1]).toLowerCase().includes(q)));
+  if (firstDeep) kbRenderChunks(firstDeep.d);
+  else kbRenderChunks(kbDocs[kbActive]);
+});
+
+/* ---------- KB: drag & drop + upload progress ---------- */
+const kbDrop = document.querySelector('[data-testid="kb-dropzone"]');
+const kbFileInput = document.getElementById("kbFileInput");
+const kbUploadsEl = document.getElementById("kbUploads");
+const kbChunkKpi = document.querySelector('[data-testid="kb-kpi-chunk"] h2');
+let kbTotalChunks = 1284;
+
+function updateChunkKpi() {
+  if (!kbChunkKpi) return;
+  kbChunkKpi.innerHTML = kbTotalChunks.toLocaleString("id-ID") + "<small>chunk</small>";
+}
+
+function extOf(name) {
+  const m = /\.([a-z0-9]+)$/i.exec(name);
+  return m ? m[1].toUpperCase() : "FILE";
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function ingestFile(file) {
+  const uid = "up-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+  const targetChunks = Math.max(24, Math.min(320, Math.round(file.size / 3200) || 60));
+  const li = document.createElement("li");
+  li.setAttribute("data-testid", "kb-upload-item");
+  li.dataset.uid = uid;
+  li.innerHTML = `
+    <span class="kb-ico">${extOf(file.name)}</span>
+    <span class="kb-upload-meta">
+      <b>${file.name}</b>
+      <small><span data-role="stage">Mengunggah…</span> · ${fmtSize(file.size)} · <span data-role="chunk">0</span>/${targetChunks} chunk</small>
+      <span class="bar kb-upload-bar"><i data-role="fill" style="width:0%"></i></span>
+    </span>
+    <span class="badge warn" data-role="badge" data-testid="kb-upload-badge">Menunggu indeks</span>`;
+  kbUploadsEl.prepend(li);
+
+  let pct = 0;
+  const fill = li.querySelector('[data-role="fill"]');
+  const chunkEl = li.querySelector('[data-role="chunk"]');
+  const stage = li.querySelector('[data-role="stage"]');
+  const badge = li.querySelector('[data-role="badge"]');
+  const iv = setInterval(() => {
+    pct = Math.min(100, pct + (6 + Math.random() * 10));
+    fill.style.width = pct + "%";
+    const doneChunks = Math.round((pct / 100) * targetChunks);
+    chunkEl.textContent = doneChunks;
+    if (pct < 45) stage.textContent = "Mengunggah…";
+    else if (pct < 100) stage.textContent = "Embedding chunk…";
+    else stage.textContent = "Terindeks";
+    if (pct >= 100) {
+      clearInterval(iv);
+      badge.textContent = "Terindeks";
+      badge.className = "badge ok";
+      kbTotalChunks += targetChunks;
+      updateChunkKpi();
+      toast(`${file.name} · ${targetChunks} chunk terindeks`);
+    }
+  }, 220);
+}
+
+function handleFiles(files) {
+  [...files].slice(0, 6).forEach(ingestFile);
+}
+
+kbFileInput.addEventListener("change", e => {
+  handleFiles(e.target.files);
+  e.target.value = "";
+});
+
+["dragenter", "dragover"].forEach(evt =>
+  kbDrop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); kbDrop.classList.add("drag-active"); }));
+["dragleave", "drop"].forEach(evt =>
+  kbDrop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); if (evt === "dragleave" && e.target !== kbDrop) return; kbDrop.classList.remove("drag-active"); }));
+kbDrop.addEventListener("drop", e => {
+  if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+});
+
+document.querySelector('[data-testid="kb-upload-btn"]').addEventListener("click", () => kbFileInput.click());
 
 kbPreview(0);
+
+/* ---------- Produk: add product modal ---------- */
+const prodModal = document.getElementById("prodModal");
+const prodForm = document.getElementById("prodForm");
+const pErr = document.getElementById("pErr");
+
+function openProdModal() {
+  prodForm.reset();
+  pErr.hidden = true;
+  prodModal.hidden = false;
+  setTimeout(() => prodForm.querySelector('[data-testid="prod-input-sku"]').focus(), 60);
+}
+function closeProdModal() { prodModal.hidden = true; }
+
+document.getElementById("btnAddProd").addEventListener("click", openProdModal);
+document.addEventListener("click", e => {
+  if (e.target.closest("[data-close-prod]")) closeProdModal();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !prodModal.hidden) closeProdModal();
+});
+
+prodForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const fd = new FormData(prodForm);
+  const sku = (fd.get("sku") || "").toString().trim().toUpperCase();
+  const name = (fd.get("name") || "").toString().trim();
+  const cat = (fd.get("cat") || "").toString().trim();
+  const price = parseInt(fd.get("price"), 10);
+  const stock = parseInt(fd.get("stock"), 10);
+  const cap = parseInt(fd.get("cap"), 10);
+  const variantsRaw = (fd.get("variants") || "").toString().trim();
+  const variants = variantsRaw ? variantsRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+
+  if (!sku || !name || !cat || isNaN(price) || isNaN(stock) || isNaN(cap) || cap < 1) {
+    pErr.textContent = "Semua kolom wajib diisi. Kapasitas minimal 1.";
+    pErr.hidden = false;
+    return;
+  }
+  if (prod.some(p => p[0] === sku)) {
+    pErr.textContent = `SKU ${sku} sudah ada di katalog.`;
+    pErr.hidden = false;
+    return;
+  }
+  prod.push([sku, name, cat, price, stock, cap, variants]);
+  renderProd();
+  closeProdModal();
+  const pct = Math.round((stock / cap) * 100);
+  toast(`Produk ${sku} · ${name} ditambahkan${pct < 20 ? " · stok kritis" : ""}`);
+});

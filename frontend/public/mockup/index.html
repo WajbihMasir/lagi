@@ -203,7 +203,7 @@
       <article class="card kpi"><p class="kpi-label">Nilai persediaan</p><h2>Rp 31,8<small>jt</small></h2><span class="delta up">+3,2%</span></article>
     </div>
     <article class="card" data-testid="table-produk">
-      <div class="card-head"><div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div><button class="gold-btn sm">+ Produk</button></div>
+      <div class="card-head"><div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div><button class="gold-btn sm" id="btnAddProd" data-testid="prod-add-btn">+ Produk</button></div>
       <div class="table-wrap"><table class="table" id="prodTable"></table></div>
     </article>
   </section>
@@ -245,10 +245,12 @@
             <button class="chip" data-kb="Kebijakan">Kebijakan</button>
           </div>
         </div>
-        <div class="kb-drop" data-testid="kb-dropzone">
+        <label class="kb-drop" data-testid="kb-dropzone" for="kbFileInput">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16.5V4.8m0 0L7.8 9M12 4.8 16.2 9M4.5 15v3.2A1.8 1.8 0 0 0 6.3 20h11.4a1.8 1.8 0 0 0 1.8-1.8V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <p><b>Tarik berkas ke sini</b> atau klik untuk pilih — PDF, DOCX, CSV, XLSX (maks 20 MB)</p>
-        </div>
+          <input type="file" id="kbFileInput" data-testid="kb-file-input" multiple accept=".pdf,.docx,.csv,.xlsx" hidden />
+        </label>
+        <ul class="kb-uploads" id="kbUploads" data-testid="kb-uploads"></ul>
         <ul class="kb-docs" id="kbDocs"></ul>
       </article>
 
@@ -325,6 +327,42 @@
 </div>
 
 <div class="toast" id="toast" data-testid="toast" hidden></div>
+
+<!-- PRODUK MODAL (Dialog) -->
+<div class="modal-wrap" id="prodModal" data-testid="prod-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pTitle">
+  <div class="modal-backdrop" data-close-prod></div>
+  <div class="modal card prod-modal-card">
+    <button class="modal-x" data-close-prod data-testid="prod-modal-close" aria-label="Tutup">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <p class="crumb">Katalog</p>
+    <h3 id="pTitle">Tambah Produk Baru</h3>
+    <form id="prodForm" data-testid="prod-form" novalidate>
+      <div class="p-grid">
+        <label class="p-field"><small>SKU</small><input type="text" name="sku" required placeholder="mis. KRP-07" data-testid="prod-input-sku" /></label>
+        <label class="p-field"><small>Nama produk</small><input type="text" name="name" required placeholder="mis. Keripik Singkong Balado" data-testid="prod-input-name" /></label>
+        <label class="p-field"><small>Kategori</small>
+          <select name="cat" required data-testid="prod-input-cat">
+            <option value="Snack">Snack</option>
+            <option value="Sambal">Sambal</option>
+            <option value="Bundling">Bundling</option>
+            <option value="Minuman">Minuman</option>
+            <option value="Lainnya">Lainnya</option>
+          </select>
+        </label>
+        <label class="p-field"><small>Harga (Rp)</small><input type="number" name="price" required min="0" placeholder="mis. 27500" data-testid="prod-input-price" /></label>
+        <label class="p-field"><small>Stok saat ini</small><input type="number" name="stock" required min="0" placeholder="mis. 120" data-testid="prod-input-stock" /></label>
+        <label class="p-field"><small>Kapasitas gudang</small><input type="number" name="cap" required min="1" placeholder="mis. 200" data-testid="prod-input-cap" /></label>
+        <label class="p-field p-field-wide"><small>Varian (opsional, pisahkan dengan koma)</small><input type="text" name="variants" placeholder="mis. original, pedas, keju" data-testid="prod-input-variants" /></label>
+      </div>
+      <p class="p-error" id="pErr" data-testid="prod-form-error" hidden></p>
+      <div class="m-foot">
+        <button type="button" class="ghost-btn" data-close-prod data-testid="prod-form-cancel">Batal</button>
+        <button type="submit" class="gold-btn" data-testid="prod-form-submit">Simpan produk</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script src="./app.js"></script>
 </body>
