@@ -1,4 +1,4 @@
-"""B2 pipeline: Understanding (LLM), Grounding (hybrid mock), Tool stubs.
+"""B3/B4 pipeline: Understanding, Grounding, Tool stubs, Stage6 Response.
 
 - Bynara Router `agnes-2.5-flash` via OpenAI-compatible SDK.
 - Graceful fallback template when Bynara unavailable (401/timeout/429/no-key).
@@ -26,6 +26,14 @@ _SYSTEM_PROMPT = (
     "Balas HANYA JSON valid dengan schema: "
     '{"intent":["..."],"entities":{"nama_produk":"","jumlah":0,"varian":"","alamat":""},"confidence":0.0}. '
     "Confidence rendah (<0.6) jika ragu. Bahasa Indonesia santai (gue/gw ok)."
+)
+
+_RESPONSE_SYSTEM_PROMPT = (
+    "Kamu adalah agen pelayanan TuntasUMKM. Ramah, profesional, Bahasa Indonesia. "
+    "Jika ada order (draft): sertakan template terstruktur — sapaan, ringkasan item (nama, qty, harga satuan), "
+    "subtotal, ongkir, total, dan sitasi SKU dalam kurung siku [SKU]. "
+    "Jika hanya tanya stok/produk: jawab singkat + sitasi [SKU]. Selalu tutup dengan konfirmasi. "
+    "Jangan mengarang harga/stok — pakai data yang diberikan."
 )
 
 
@@ -92,11 +100,9 @@ async def run_understanding(message_text: str) -> tuple[dict[str, Any], dict[str
             max_tokens=256,
         )
         content = (resp.choices[0].message.content or "").strip()
-        # Try direct JSON parse; if wrapped in ```json fence, strip fences.
         if content.startswith("```"):
             content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.MULTILINE).strip()
         parsed = json.loads(content)
-        # Ensure schema shape
         parsed.setdefault("intent", ["lainnya"])
         parsed.setdefault("entities", {"nama_produk": "", "jumlah": 0, "varian": "", "alamat": ""})
         parsed.setdefault("confidence", 0.5)
@@ -147,7 +153,6 @@ async def run_grounding(db, message_text: str, entities: dict[str, Any]) -> tupl
     if entities.get("nama_produk"):
         tokens += _tokenize(entities["nama_produk"])
 
-    # 1) Text search on name/description via regex OR
     text_hits: list[dict] = []
     if tokens:
         or_clauses = [{"name": {"$regex": t, "$options": "i"}} for t in tokens]
@@ -155,14 +160,12 @@ async def run_grounding(db, message_text: str, entities: dict[str, Any]) -> tupl
         cursor = db.products.find({"$or": or_clauses}, {"_id": 0}).limit(20)
         text_hits = await cursor.to_list(length=20)
 
-    # 2) Exact SKU boost
     sku_hits: list[dict] = []
     sku_match = re.findall(r"[A-Z]{2,4}-\d{1,3}", message_text.upper())
     if sku_match:
         cursor = db.products.find({"sku": {"$in": sku_match}}, {"_id": 0})
         sku_hits = await cursor.to_list(length=10)
 
-    # 3) BM25-lite over text_hits pool for local ranking
     pool = {p["sku"]: p for p in text_hits + sku_hits}
     bm25_ranked = sorted(
         pool.values(),
@@ -170,7 +173,6 @@ async def run_grounding(db, message_text: str, entities: dict[str, Any]) -> tupl
         reverse=True,
     )
 
-    # 4) RRF merge: [text_order, sku_order, bm25_order]
     rank_lists = [
         [p["sku"] for p in text_hits],
         [p["sku"] for p in sku_hits],
@@ -203,7 +205,6 @@ async def tool_cek_stok(db, product_id: str) -> dict[str, Any]:
 
 
 async def tool_hitung_ongkir(items: list[dict]) -> dict[str, Any]:
-    # Mock formula: base 15k + 500/pcs, capped 50k
     total_qty = sum(int(it.get("qty", 0)) for it in items)
     ongkir = min(50000, 15000 + 500 * total_qty)
     return {"ok": True, "total_qty": total_qty, "ongkir": ongkir}
@@ -212,14 +213,13 @@ async def tool_hitung_ongkir(items: list[dict]) -> dict[str, Any]:
 async def tool_buat_draft_pesanan(
     db, customer_id: str, items: list[dict], idempotency_key: str
 ) -> dict[str, Any]:
-    # Idempotent lookup by (customer_id, idempotency_key)
+    """B3: Idempotent via unique (customer_id, idempotency_key). Stock NOT reduced yet (PRD:302)."""
     existing = await db.orders.find_one(
         {"customer_id": customer_id, "idempotency_key": idempotency_key}, {"_id": 0}
     )
     if existing:
         return {"ok": True, "order": existing, "idempotent_hit": True}
 
-    # Enrich items with unit_price from DB, validate stock
     enriched: list[dict] = []
     subtotal = 0
     for it in items:
@@ -235,7 +235,6 @@ async def tool_buat_draft_pesanan(
     ongkir_r = await tool_hitung_ongkir(enriched)
     total = subtotal + ongkir_r["ongkir"]
 
-    # Generate TU-xxx order id (numeric suffix from count + 2500)
     count = await db.orders.count_documents({})
     order_id = f"TU-{2500 + count:04d}"
 
@@ -248,9 +247,93 @@ async def tool_buat_draft_pesanan(
         "total": total,
         "status": "pending_approval",
         "approval_trace": [],
-        "trace_id": "",  # set by caller
+        "trace_id": "",
         "idempotency_key": idempotency_key,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    await db.orders.insert_one({**doc})
+    try:
+        await db.orders.insert_one({**doc})
+    except Exception:  # duplicate on unique idempotency_key race
+        again = await db.orders.find_one(
+            {"customer_id": customer_id, "idempotency_key": idempotency_key}, {"_id": 0}
+        )
+        if again:
+            return {"ok": True, "order": again, "idempotent_hit": True}
+        raise
     return {"ok": True, "order": doc, "idempotent_hit": False}
+
+
+# ---------- Stage 6: Chat Response (agnes-2.5-flash + fallback template) ----------
+def _template_response(understanding: dict, grounding: list[dict], draft: dict | None) -> str:
+    intents = understanding.get("intent", [])
+    if draft:
+        lines = [f"Halo Kak 👋 Draft pesanan sudah kami siapkan (order {draft.get('order_id', '-')})."]
+        for it in draft.get("items", []):
+            lines.append(
+                f"• {it['name']} ×{it['qty']} @ Rp{int(it['unit_price']):,} [{it['product_id']}]"
+            )
+        lines.append(f"Subtotal: Rp{int(draft.get('subtotal', 0)):,}")
+        lines.append(f"Ongkir: Rp{int(draft.get('ongkir', 0)):,}")
+        lines.append(f"Total: *Rp{int(draft.get('total', 0)):,}*")
+        lines.append("Mohon tunggu approval pemilik ya Kak. Terima kasih 🙏")
+        return "\n".join(lines).replace(",", ".")
+    if grounding:
+        top = grounding[0]
+        if "tanya_stok" in intents:
+            return (
+                f"Halo Kak 👋 Stok {top['name']} saat ini {top['stock']} pcs [{top['sku']}]. "
+                f"Mau saya siapkan pesanan?"
+            )
+        return (
+            f"Halo Kak 👋 {top['name']} harga Rp{int(top['price']):,}/pcs [{top['sku']}]. "
+            f"Ada yang bisa saya bantu?"
+        ).replace(",", ".")
+    return "Halo Kak 👋 Terima kasih pesannya, tim kami akan segera membantu. Boleh dijelaskan lebih detail?"
+
+
+async def run_stage6_response(
+    understanding: dict, grounding: list[dict], draft: dict | None
+) -> tuple[str, dict[str, Any]]:
+    """Stage 6 — generate final customer-facing reply."""
+    started = time.perf_counter()
+    template = _template_response(understanding, grounding, draft)
+    meta: dict[str, Any] = {"model": os.environ.get("LLM_MODEL", "agnes-2.5-flash"), "provider": "bynara"}
+
+    cli = _bynara_client()
+    if cli is None:
+        meta["fallback"] = True
+        meta["fallback_reason"] = "no_api_key"
+        meta["duration_ms"] = int((time.perf_counter() - started) * 1000)
+        return template, meta
+
+    user_ctx = {
+        "intent": understanding.get("intent", []),
+        "entities": understanding.get("entities", {}),
+        "grounding": [
+            {"sku": g["sku"], "name": g["name"], "stock": g["stock"], "price": g["price"]}
+            for g in (grounding or [])[:3]
+        ],
+        "draft": draft,
+    }
+    try:
+        resp = await cli.chat.completions.create(
+            model=meta["model"],
+            messages=[
+                {"role": "system", "content": _RESPONSE_SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(user_ctx, ensure_ascii=False)},
+            ],
+            temperature=0.4,
+            max_tokens=380,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        if not text:
+            raise ValueError("empty_response")
+        meta["fallback"] = False
+    except (AuthenticationError, RateLimitError, APITimeoutError, APIError, ValueError) as e:
+        logger.warning("Bynara response fail, template used: %s", type(e).__name__)
+        meta["fallback"] = True
+        meta["fallback_reason"] = type(e).__name__
+        text = template
+
+    meta["duration_ms"] = int((time.perf_counter() - started) * 1000)
+    return text, meta

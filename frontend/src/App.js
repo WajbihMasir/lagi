@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -9,8 +9,11 @@ import {
   AreaChart, Area,
 } from "recharts";
 import {
-  PERIODS, rp, queue, initialTrx, prod, metrics, rep, initialConvs, DEMO_FLOWS,
+  PERIODS as MOCK_PERIODS, rp, queue as mockQueue, initialTrx, prod, metrics, rep, initialConvs, DEMO_FLOWS,
 } from "@/data";
+import {
+  socket, useAnalytics, useApprovals, decideApproval, exportAnalyticsCSV, chatIntake,
+} from "@/api";
 
 /* ---------- palette (matches mockup jade/gold) ---------- */
 const JADE = "#2FB98A";
@@ -82,6 +85,42 @@ export default function App() {
   const [search, setSearch] = useState("");
   const { show: toast, node: toastNode } = useToast();
 
+  /* B4: fetch analytics for the selected period; fallback to mock on failure */
+  const analyticsQ = useAnalytics(period);
+  const approvalsQ = useApprovals("pending");
+
+  const currentPeriod = useMemo(() => {
+    const mock = MOCK_PERIODS[period] || MOCK_PERIODS.today;
+    const be = analyticsQ.data;
+    if (!be || analyticsQ.isError) return mock;
+    // Merge: prefer backend values when present, else mock
+    const omzet = (be.omzet_series && be.omzet_series.length ? be.omzet_series : mock.omzet);
+    const intent = (be.intent && be.intent.length ? be.intent : mock.intent);
+    const response = (be.response && be.response.length
+      ? be.response.map((r) => ({ hour: r.hour, ms: r.ms }))
+      : mock.response);
+    const kategori = (be.kategori && be.kategori.length
+      ? be.kategori.map((k) => ({ name: k.name, value: Math.round((k.omzet || 0) / 100000) / 10 || k.qty }))
+      : mock.kategori);
+    return {
+      label: be.label || mock.label,
+      omzet, kategori, intent, response,
+      total: be.total || mock.total,
+    };
+  }, [period, analyticsQ.data, analyticsQ.isError]);
+
+  const queue = useMemo(() => {
+    if (!approvalsQ.data || !approvalsQ.data.items || approvalsQ.data.items.length === 0) return mockQueue;
+    return approvalsQ.data.items.map((a) => ({
+      n: a.order?.customer_id || a.trace_id.slice(0, 8),
+      d: (a.order?.items || []).map((it) => `${it.qty} pcs ${it.name}`).join(" · ") || "Draft pesanan",
+      a: a.order?.total || 0,
+      s: a.reminder_sent ? "jade" : "",
+      approval_id: a.approval_id,
+      order_id: a.order_id,
+    }));
+  }, [approvalsQ.data]);
+
   useEffect(() => {
     const applyHash = () => {
       const h = window.location.hash.slice(1);
@@ -107,6 +146,29 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
+  // B3 realtime: connect socket and refetch on relevant events
+  useEffect(() => {
+    socket.connect();
+    const onApproval = (p) => { toast(`Approval baru · ${p.order_id || p.approval_id}`); approvalsQ.refetch?.(); };
+    const onDecided = (p) => { toast(`Approval ${p.decision} · ${p.order_id || ""}`); approvalsQ.refetch?.(); analyticsQ.refetch?.(); };
+    const onChat = (p) => { if (p.auto) toast("Auto-response terkirim ke pelanggan"); };
+    const onTrace = () => { analyticsQ.refetch?.(); };
+    socket.on("approval:required", onApproval);
+    socket.on("approval:decided", onDecided);
+    socket.on("approval:reminder", (p) => toast(`Reminder approval ${p.approval_id.slice(0, 8)}`));
+    socket.on("chat:new", onChat);
+    socket.on("trace:update", onTrace);
+    return () => {
+      socket.off("approval:required", onApproval);
+      socket.off("approval:decided", onDecided);
+      socket.off("approval:reminder");
+      socket.off("chat:new", onChat);
+      socket.off("trace:update", onTrace);
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // close date picker on outside click
   useEffect(() => {
     if (!showDatePicker) return;
@@ -116,8 +178,6 @@ export default function App() {
     document.addEventListener("click", h);
     return () => document.removeEventListener("click", h);
   }, [showDatePicker]);
-
-  const currentPeriod = PERIODS[period] || PERIODS.today;
 
   const titles = {
     ringkasan: ["Operasional / Ringkasan", "Ringkasan Harian"],
@@ -134,7 +194,7 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
-  /* Synthetic Demo Controls */
+  /* Synthetic Demo Controls — inject conversation & fire real chat/intake to backend */
   const playDemoFlow = (flowKey) => {
     const flow = DEMO_FLOWS[flowKey];
     if (!flow) return;
@@ -143,22 +203,56 @@ export default function App() {
     setActiveConv(0);
     goView("inbox");
     toast(`${flow.label} · auto-inject conversation`);
-    if (c.id && c.id.startsWith("TU-") && c.total > 0) {
-      const row = [c.id, c.n, c.thread.find((t) => t[0] === "cust")?.[1]?.slice(0, 40) || "—", c.total, "warn", "Pending approval", 0, false, `wa-demo-${Date.now()}`];
-      setTrx((prev) => [row, ...prev]);
-    }
+
+    // Real backend call — first customer message from the thread
+    const firstCust = flow.conv.thread.find((t) => t[0] === "cust")?.[1] || "halo";
+    chatIntake({
+      customer_id: `demo-${flowKey}-${Date.now()}`,
+      message_text: firstCust,
+      channel: "WhatsApp",
+    })
+      .then((res) => {
+        toast(`Trace ${res.trace_id.slice(0, 8)} · ${res.status}`);
+        if (res.draft) {
+          const row = [res.draft.order_id, c.n, firstCust.slice(0, 40), res.draft.total, "warn", "Pending approval", 0, false, `wa-be-${Date.now()}`];
+          setTrx((prev) => [row, ...prev]);
+        }
+        approvalsQ.refetch?.();
+        analyticsQ.refetch?.();
+      })
+      .catch((err) => {
+        // Fallback ke local push (cascade PRD:217)
+        if (c.id && c.id.startsWith("TU-") && c.total > 0) {
+          const row = [c.id, c.n, c.thread.find((t) => t[0] === "cust")?.[1]?.slice(0, 40) || "—", c.total, "warn", "Pending approval", 0, false, `wa-demo-${Date.now()}`];
+          setTrx((prev) => [row, ...prev]);
+        }
+        toast(`Backend fallback: ${err?.response?.status || "offline"}`);
+      });
   };
 
   const exportCSV = () => {
-    const rows = [
-      ["Periode", "Order", "Omzet", "Akurasi", "Intervensi"],
-      ...rep.map((r) => [r[0], r[1], r[2], r[3], r[4]]),
-      [],
-      ["Kategori", "Kontribusi (jt)"],
-      ...currentPeriod.kategori.map((k) => [k.name, k.value]),
-    ];
-    downloadCSV(`tuntas-umkm-report-${period}-${Date.now()}.csv`, rows);
-    toast("Ekspor CSV berhasil");
+    exportAnalyticsCSV(period)
+      .then(() => toast("Ekspor CSV berhasil"))
+      .catch(() => {
+        // fallback local CSV from mock data
+        const rows = [
+          ["Periode", "Order", "Omzet", "Akurasi", "Intervensi"],
+          ...rep.map((r) => [r[0], r[1], r[2], r[3], r[4]]),
+        ];
+        downloadCSV(`tuntas-umkm-report-${period}-${Date.now()}.csv`, rows);
+        toast("Ekspor CSV (fallback lokal)");
+      });
+  };
+
+  const approveFromQueue = (approval_id) => {
+    decideApproval(approval_id, "approve", { reason: "operator ok" })
+      .then((r) => { toast(`Order ${r.order.order_id} approved`); approvalsQ.refetch(); analyticsQ.refetch(); })
+      .catch(() => toast("Gagal approve"));
+  };
+  const rejectFromQueue = (approval_id) => {
+    decideApproval(approval_id, "reject", { reason: "operator tolak" })
+      .then(() => { toast("Rejected"); approvalsQ.refetch(); })
+      .catch(() => toast("Gagal reject"));
   };
 
   return (
@@ -300,7 +394,7 @@ export default function App() {
         </header>
 
         {view === "ringkasan" && (
-          <Ringkasan loading={loading} currentPeriod={currentPeriod} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} />
+          <Ringkasan loading={loading} currentPeriod={currentPeriod} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
         )}
         {view === "inbox" && (
           <Inbox loading={loading} convs={convs} activeConv={activeConv} setActiveConv={setActiveConv} />
@@ -321,7 +415,7 @@ export default function App() {
 /* ============================================================
    RINGKASAN — 4 Recharts (LineChart, BarChart, PieChart, AreaChart)
    ============================================================ */
-function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue }) {
+function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onApprove, onReject }) {
   const omzetData = currentPeriod.omzet.map((v, i) => ({
     day: ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][i] || `D${i + 1}`,
     omzet: v,
@@ -397,6 +491,22 @@ function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue }) {
                   <span className={`dot ${q.s}`}></span>
                   <span className="q-meta"><b>{q.n}</b><small>{q.d}</small></span>
                   <span className="q-amt">{q.a === 0 ? "—" : rp(q.a)}</span>
+                  {q.approval_id && (
+                    <span style={{ display: "flex", gap: 6, marginLeft: 8 }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="gold-btn sm"
+                        data-testid={`approve-${q.approval_id}`}
+                        onClick={() => onApprove?.(q.approval_id)}
+                        style={{ padding: "4px 10px", fontSize: 11 }}
+                      >Approve</button>
+                      <button
+                        className="ghost-btn sm"
+                        data-testid={`reject-${q.approval_id}`}
+                        onClick={() => onReject?.(q.approval_id)}
+                        style={{ padding: "4px 10px", fontSize: 11 }}
+                      >Tolak</button>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

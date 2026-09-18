@@ -120,3 +120,44 @@ class WorkflowTrace(BaseModel):
     status: str = "pending_approval"
     draft: dict[str, Any] | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------- Approvals (B3) ----------
+class ApprovalCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    trace_id: str
+    order_id: str
+
+
+class ApprovalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    reason: str | None = None
+    items: list[dict[str, Any]] | None = None  # for modify: [{product_id, qty}]
+
+
+class Approval(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    approval_id: str = Field(default_factory=lambda: f"APV-{uuid.uuid4().hex[:8].upper()}")
+    trace_id: str
+    order_id: str
+    status: Literal["pending", "approved", "rejected", "modified", "auto_hold"] = "pending"
+    requested_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    responded_at: str | None = None
+    decision: str | None = None
+    modified_by: str | None = None
+    reason: str | None = None
+    reminder_sent: bool = False
+    auto_response_sent: bool = False
+
+
+# ---------- Analytics (B4) ----------
+class AnalyticsEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    trace_id: str = ""
+    customer_id: str = ""
+    intent: list[str] = Field(default_factory=list)
+    tools_called: list[str] = Field(default_factory=list)
+    approval_status: str = "n/a"
+    response_time_ms: int = 0
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
