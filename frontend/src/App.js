@@ -20,7 +20,7 @@ const JADE = "#2FB98A";
 const JADE_DIM = "#1B6B54";
 const GOLD = "#D9A94B";
 const DANGER = "#E0715F";
-const PIE_COLORS = [JADE, GOLD, "#7FE3C0", DANGER, "#B08A38"];
+const PIE_COLORS = [JADE, GOLD, "#7FE3C0", "#C97E56", "#B08A38"];
 
 /* ---------- CSV export helper ---------- */
 function downloadCSV(filename, rows) {
@@ -398,7 +398,7 @@ export default function App() {
           <Ringkasan loading={loading} currentPeriod={currentPeriod} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
         )}
         {view === "inbox" && (
-          <Inbox loading={loading} convs={convs} activeConv={activeConv} setActiveConv={setActiveConv} />
+          <Inbox loading={loading} convs={convs} setConvs={setConvs} activeConv={activeConv} setActiveConv={setActiveConv} pushToast={toast} />
         )}
         {view === "transaksi" && (
           <Transaksi loading={loading} trx={trx} trxFilter={trxFilter} setTrxFilter={setTrxFilter} search={search} exportCSV={exportCSV} />
@@ -623,8 +623,45 @@ function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onAp
 /* ============================================================
    INBOX
    ============================================================ */
-function Inbox({ loading, convs, activeConv, setActiveConv }) {
+function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast }) {
   const c = convs[activeConv] || convs[0];
+  const [draft, setDraft] = React.useState("");
+  const threadRef = React.useRef(null);
+
+  React.useEffect(() => {
+    // Auto-scroll thread to bottom whenever active conversation or its length changes
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [activeConv, c?.thread?.length]);
+
+  const sendReply = () => {
+    const text = draft.trim();
+    if (!text || !c) return;
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const stamp = `${hh}:${mm}`;
+    setConvs((prev) => prev.map((cv, i) => {
+      if (i !== activeConv) return cv;
+      return {
+        ...cv,
+        thread: [...cv.thread, ["agent", text, stamp]],
+        last: text.length > 46 ? text.slice(0, 46) + "…" : text,
+        time: stamp,
+        unread: 0,
+      };
+    }));
+    setDraft("");
+    pushToast?.("Balasan manual terkirim");
+  };
+
+  const onKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendReply();
+    }
+  };
+
   return (
     <section className="view active">
       <div className="inbox">
@@ -653,12 +690,36 @@ function Inbox({ loading, convs, activeConv, setActiveConv }) {
             <div className="chat-who"><b>{c?.n}</b><small>{c?.ch} · {c?.phone}</small></div>
             <span className={`badge ${c?.state === "pending_approval" ? "warn" : "ok"}`}>state: {c?.state}</span>
           </div>
-          <div className="thread">
+          <div className="thread" ref={threadRef} data-testid="chat-thread">
             {c?.thread.map((m, i) => m[0] === "tool" ? (
               <div key={i} className="msg tool"><b>tool</b> · {m[1]}</div>
             ) : (
               <div key={i} className={`msg ${m[0]}`}>{m[1]}{m[2] && <small>{m[2]}</small>}</div>
             ))}
+          </div>
+          <div className="chat-composer" data-testid="chat-composer">
+            <textarea
+              className="chat-composer-input"
+              rows={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onKey}
+              placeholder="Tulis balasan manual — Enter untuk kirim, Shift+Enter untuk baris baru"
+              data-testid="chat-composer-input"
+              disabled={!c}
+            />
+            <button
+              type="button"
+              className="chat-composer-send"
+              onClick={sendReply}
+              disabled={!draft.trim() || !c}
+              data-testid="chat-composer-send"
+              aria-label="Kirim balasan"
+              title="Kirim balasan (Enter)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 11.5 20.5 4l-4 16-4-7-9-1.5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
+              <span>Kirim</span>
+            </button>
           </div>
         </article>
       </div>
