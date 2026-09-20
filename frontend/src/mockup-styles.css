@@ -315,7 +315,7 @@ html[data-theme="light"] .theme-btn .i-moon{opacity:0;transform:rotate(90deg) sc
 @keyframes grow{from{width:0}}
 
 /* ---------- inbox chat ---------- */
-.inbox{display:grid;grid-template-columns:280px 1fr;gap:12px;align-items:start}
+.inbox{display:grid;grid-template-columns:280px 1fr;gap:12px;align-items:stretch;min-height:calc(100vh - 170px)}
 .conv{list-style:none;margin:0;padding:0}
 .conv li{display:flex;gap:9px;padding:9px 8px;border-radius:10px;cursor:pointer;transition:background-color .2s}
 .conv li:hover{background:var(--soft)}
@@ -327,12 +327,14 @@ html[data-theme="light"] .theme-btn .i-moon{opacity:0;transform:rotate(90deg) sc
 .conv-side{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .conv-side small{font-size:10px;color:var(--muted-2)}
 
-.chat-card{display:flex;flex-direction:column;gap:12px}
-.chat-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line-soft)}
+.chat-card{display:flex;flex-direction:column;gap:12px;min-height:0}
+.chat-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line-soft);flex:none}
 .chat-who{flex:1}
 .chat-who b{display:block;font-size:13.5px}
 .chat-who small{font-size:11px;color:var(--muted)}
-.thread{display:flex;flex-direction:column;gap:9px;max-height:260px;overflow-y:auto;padding-right:6px}
+.thread{display:flex;flex-direction:column;gap:9px;flex:1 1 auto;min-height:280px;max-height:none;overflow-y:auto;padding-right:6px}
+.conv-card{display:flex;flex-direction:column;min-height:0}
+.conv-card .conv{flex:1;overflow-y:auto}
 .msg{max-width:74%;padding:9px 12px;border-radius:13px;font-size:12.5px;line-height:1.5;animation:rise .45s cubic-bezier(.2,.9,.2,1) both}
 .msg small{display:block;margin-top:4px;font-size:10px;opacity:.6}
 .msg.cust{align-self:flex-start;background:var(--soft-2);border:1px solid var(--line-soft);border-bottom-left-radius:4px}
