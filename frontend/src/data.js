@@ -178,6 +178,114 @@ export const initialConvs = [
   },
 ];
 
+/* Knowledge Base — mock RAG documents (nama, ukuran, terakhir sinkron) */
+export const KB_DOCS = [
+  {
+    id: "kb-01",
+    name: "Katalog Produk & Harga 2026.pdf",
+    kind: "PDF",
+    size: "412 KB",
+    chunks: 184,
+    lastSync: "Hari ini · 07:20",
+    status: "synced",
+    tag: "harga",
+  },
+  {
+    id: "kb-02",
+    name: "SOP Balas Chat Pelanggan.md",
+    kind: "MD",
+    size: "38 KB",
+    chunks: 42,
+    lastSync: "Hari ini · 06:55",
+    status: "synced",
+    tag: "sop",
+  },
+  {
+    id: "kb-03",
+    name: "FAQ Reseller & Grosir.docx",
+    kind: "DOCX",
+    size: "91 KB",
+    chunks: 76,
+    lastSync: "Kemarin · 21:12",
+    status: "synced",
+    tag: "reseller",
+  },
+  {
+    id: "kb-04",
+    name: "Kebijakan Retur & Komplain.pdf",
+    kind: "PDF",
+    size: "128 KB",
+    chunks: 58,
+    lastSync: "2 hari lalu · 10:04",
+    status: "synced",
+    tag: "kebijakan",
+  },
+  {
+    id: "kb-05",
+    name: "Tarif Ongkir Ekspedisi.xlsx",
+    kind: "XLSX",
+    size: "76 KB",
+    chunks: 63,
+    lastSync: "3 hari lalu · 16:38",
+    status: "syncing",
+    tag: "ongkir",
+  },
+  {
+    id: "kb-06",
+    name: "Bundling & Promo Berjalan.pdf",
+    kind: "PDF",
+    size: "204 KB",
+    chunks: 91,
+    lastSync: "3 hari lalu · 08:22",
+    status: "synced",
+    tag: "promo",
+  },
+  {
+    id: "kb-07",
+    name: "Skrip Follow-up Pesanan.md",
+    kind: "MD",
+    size: "22 KB",
+    chunks: 27,
+    lastSync: "5 hari lalu · 09:11",
+    status: "synced",
+    tag: "sop",
+  },
+  {
+    id: "kb-08",
+    name: "Jadwal Restock Mingguan.csv",
+    kind: "CSV",
+    size: "12 KB",
+    chunks: 19,
+    lastSync: "1 minggu lalu · 12:47",
+    status: "stale",
+    tag: "stok",
+  },
+];
+
+/* Quick reply chips di atas composer */
+export const QUICK_REPLIES = [
+  {
+    key: "konfirmasi",
+    label: "Konfirmasi order",
+    text: "Baik Kak, pesanannya sudah kami konfirmasi ya. Terima kasih! 🙏",
+  },
+  {
+    key: "alamat",
+    label: "Minta alamat",
+    text: "Boleh dibantu kirim alamat lengkap + nomor HP penerima ya, Kak?",
+  },
+  {
+    key: "ongkir",
+    label: "Info ongkir",
+    text: "Untuk ongkir, boleh info kota/kecamatan tujuannya dulu Kak, biar saya cek tarif ekspedisi terbaiknya.",
+  },
+  {
+    key: "pembayaran",
+    label: "Info pembayaran",
+    text: "Pembayaran bisa via transfer BCA / Mandiri / QRIS ya Kak. Nomor rekening akan saya kirim setelah invoice dibuat.",
+  },
+];
+
 /* Synthetic Demo Controls — 3 flows */
 export const DEMO_FLOWS = {
   flow1: {

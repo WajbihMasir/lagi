@@ -9,7 +9,7 @@ import {
   AreaChart, Area,
 } from "recharts";
 import {
-  PERIODS as MOCK_PERIODS, rp, queue as mockQueue, initialTrx, prod, metrics, rep, initialConvs, DEMO_FLOWS,
+  PERIODS as MOCK_PERIODS, rp, queue as mockQueue, initialTrx, prod, metrics, rep, initialConvs, DEMO_FLOWS, KB_DOCS, QUICK_REPLIES,
 } from "@/data";
 import {
   socket, useAnalytics, useApprovals, decideApproval, exportAnalyticsCSV, chatIntake,
@@ -83,6 +83,7 @@ export default function App() {
   const [convs, setConvs] = useState(initialConvs);
   const [activeConv, setActiveConv] = useState(0);
   const [search, setSearch] = useState("");
+  const [inboxPulse, setInboxPulse] = useState(0);
   const { show: toast, node: toastNode } = useToast();
 
   /* B4: fetch analytics for the selected period; fallback to mock on failure */
@@ -150,9 +151,12 @@ export default function App() {
   // B3 realtime: connect socket and refetch on relevant events
   useEffect(() => {
     socket.connect();
-    const onApproval = (p) => { toast(`Approval baru · ${p.order_id || p.approval_id}`); approvalsQ.refetch?.(); };
+    const onApproval = (p) => { toast(`Approval baru · ${p.order_id || p.approval_id}`); approvalsQ.refetch?.(); setInboxPulse((n) => n + 1); };
     const onDecided = (p) => { toast(`Approval ${p.decision} · ${p.order_id || ""}`); approvalsQ.refetch?.(); analyticsQ.refetch?.(); };
-    const onChat = (p) => { if (p.auto) toast("Auto-response terkirim ke pelanggan"); };
+    const onChat = (p) => {
+      if (p.auto) toast("Auto-response terkirim ke pelanggan");
+      setInboxPulse((n) => n + 1);
+    };
     const onTrace = () => { analyticsQ.refetch?.(); };
     socket.on("approval:required", onApproval);
     socket.on("approval:decided", onDecided);
@@ -191,6 +195,7 @@ export default function App() {
 
   const goView = (v) => {
     setView(v);
+    if (v === "inbox") setInboxPulse(0);
     window.location.hash = v;
     window.scrollTo({ top: 0 });
   };
@@ -283,7 +288,7 @@ export default function App() {
           <p className="nav-label">Operasional</p>
           {[
             { key: "ringkasan", label: "Ringkasan", icon: "M4 4h6v9H4zM4 16h6v4H4zM14 11h6v9h-6zM14 4h6v4h-6z" },
-            { key: "inbox", label: "Inbox Chat", icon: "M20.5 11.8a8.2 8.2 0 0 1-11.9 7.3L4 20.5l1.4-4.5A8.2 8.2 0 1 1 20.5 11.8z", pill: convs.length },
+            { key: "inbox", label: "Inbox Chat", icon: "M20.5 11.8a8.2 8.2 0 0 1-11.9 7.3L4 20.5l1.4-4.5A8.2 8.2 0 1 1 20.5 11.8z", pill: convs.length, pulse: inboxPulse > 0 },
             { key: "transaksi", label: "Transaksi", icon: "M3.5 8.5h13m-3.5-3.5 3.5 3.5-3.5 3.5M20.5 15.5h-13m3.5-3.5-3.5 3.5 3.5 3.5", pill: trx.filter((t) => t[4] === "warn").length },
             { key: "produk", label: "Produk & Stok", icon: "M12 3.2 4 7.3v9.4l8 4.1 8-4.1V7.3zM4 7.3l8 4.1 8-4.1M12 11.4V20.8" },
             { key: "knowledge", label: "Knowledge Base", icon: "M4.5 5.2A1.7 1.7 0 0 1 6.2 3.5H19v14H6.2a1.7 1.7 0 0 0-1.7 1.7zM4.5 19.2a1.7 1.7 0 0 0 1.7 1.8H19M8.5 7.6h6.5M8.5 11.2h4.5", pill: "RAG" },
@@ -301,6 +306,7 @@ export default function App() {
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d={n.icon} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
               <span>{n.label}</span>
+              {n.pulse && <i className="nav-pulse" aria-label="pesan baru" data-testid="nav-pulse-inbox"></i>}
               {n.pill != null && <i className="pill">{n.pill}</i>}
             </a>
           ))}
@@ -398,7 +404,7 @@ export default function App() {
           <Ringkasan loading={loading} currentPeriod={currentPeriod} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
         )}
         {view === "inbox" && (
-          <Inbox loading={loading} convs={convs} setConvs={setConvs} activeConv={activeConv} setActiveConv={setActiveConv} pushToast={toast} />
+          <Inbox loading={loading} convs={convs} setConvs={setConvs} activeConv={activeConv} setActiveConv={setActiveConv} pushToast={toast} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
         )}
         {view === "transaksi" && (
           <Transaksi loading={loading} trx={trx} trxFilter={trxFilter} setTrxFilter={setTrxFilter} search={search} exportCSV={exportCSV} />
@@ -623,7 +629,7 @@ function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onAp
 /* ============================================================
    INBOX
    ============================================================ */
-function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast }) {
+function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast, queue = [], onApprove, onReject }) {
   const c = convs[activeConv] || convs[0];
   const [draft, setDraft] = React.useState("");
   const threadRef = React.useRef(null);
@@ -634,8 +640,8 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast 
     if (el) el.scrollTop = el.scrollHeight;
   }, [activeConv, c?.thread?.length]);
 
-  const sendReply = () => {
-    const text = draft.trim();
+  const sendReply = (overrideText) => {
+    const text = (typeof overrideText === "string" ? overrideText : draft).trim();
     if (!text || !c) return;
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, "0");
@@ -662,9 +668,49 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast 
     }
   };
 
+  // AI intent detection — panel muncul kalau state=pending_approval & ada total
+  const hasDraft = !!(c && c.state === "pending_approval" && c.total > 0);
+  // Coba matching approval dari queue berdasarkan customer name / order id
+  const linkedApproval = React.useMemo(() => {
+    if (!c) return null;
+    return queue.find((q) => q.n === c.n || q.n === c.id) || null;
+  }, [c, queue]);
+
+  const draftItems = React.useMemo(() => {
+    if (!c || !hasDraft) return [];
+    // Derive line items from latest agent messages or fallback to `last`
+    const lines = (c.thread || [])
+      .filter((m) => m[0] === "agent" || m[0] === "tool")
+      .map((m) => m[1])
+      .join(" ");
+    // fallback: 1 baris agregat
+    return [{ name: c.last || "Draft pesanan", qty: 1, subtotal: c.total, hint: lines.slice(0, 80) }];
+  }, [c, hasDraft]);
+
+  const ongkir = hasDraft ? Math.max(0, Math.round((c.total || 0) * 0.05 / 1000) * 1000) : 0;
+  const subtotal = hasDraft ? (c.total || 0) - ongkir : 0;
+
+  const approveDraft = () => {
+    if (linkedApproval?.approval_id && onApprove) {
+      onApprove(linkedApproval.approval_id);
+    } else {
+      pushToast?.(`Draft ${c?.id || ""} di-approve (lokal)`);
+    }
+    // Optimistically mark conv as approved locally
+    setConvs((prev) => prev.map((cv, i) => (i === activeConv ? { ...cv, state: "answered" } : cv)));
+  };
+  const rejectDraft = () => {
+    if (linkedApproval?.approval_id && onReject) {
+      onReject(linkedApproval.approval_id);
+    } else {
+      pushToast?.(`Draft ${c?.id || ""} ditolak (lokal)`);
+    }
+    setConvs((prev) => prev.map((cv, i) => (i === activeConv ? { ...cv, state: "answered" } : cv)));
+  };
+
   return (
     <section className="view active">
-      <div className="inbox">
+      <div className={`inbox ${hasDraft ? "with-draft" : ""}`} data-testid="inbox-grid">
         <article className="card conv-card">
           <div className="card-head"><div><h3>Percakapan</h3><p>Masuk dari WhatsApp &amp; Instagram</p></div><span className="tag">{convs.length}</span></div>
           {loading ? (
@@ -697,6 +743,24 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast 
               <div key={i} className={`msg ${m[0]}`}>{m[1]}{m[2] && <small>{m[2]}</small>}</div>
             ))}
           </div>
+
+          {/* Quick Replies */}
+          <div className="quick-replies" data-testid="quick-replies" role="toolbar" aria-label="Balasan cepat">
+            {QUICK_REPLIES.map((q) => (
+              <button
+                key={q.key}
+                type="button"
+                className="chip"
+                onClick={() => sendReply(q.text)}
+                disabled={!c}
+                data-testid={`quick-reply-${q.key}`}
+                title={q.text}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+
           <div className="chat-composer" data-testid="chat-composer">
             <textarea
               className="chat-composer-input"
@@ -711,7 +775,7 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast 
             <button
               type="button"
               className="chat-composer-send"
-              onClick={sendReply}
+              onClick={() => sendReply()}
               disabled={!draft.trim() || !c}
               data-testid="chat-composer-send"
               aria-label="Kirim balasan"
@@ -722,6 +786,72 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast 
             </button>
           </div>
         </article>
+
+        {/* Draft Order Panel — muncul otomatis saat AI mendeteksi intent order */}
+        {hasDraft && (
+          <aside className="card draft-panel" data-testid="draft-order-panel" aria-label="Draft order">
+            <div className="draft-head">
+              <div>
+                <p className="draft-eyebrow">Draft transaksi</p>
+                <h3>{c.id}</h3>
+                <small className="draft-sub">Terdeteksi otomatis dari intent pesanan</small>
+              </div>
+              <span className="badge warn" data-testid="draft-badge-state">menunggu approval</span>
+            </div>
+
+            <div className="draft-customer">
+              <span className="avatar sm">{c.ini}</span>
+              <div>
+                <b>{c.n}</b>
+                <small>{c.ch} · {c.phone}</small>
+              </div>
+            </div>
+
+            <ul className="draft-items" data-testid="draft-items">
+              {draftItems.map((it, i) => (
+                <li key={i}>
+                  <span className="draft-item-name">
+                    <b>{it.qty}×</b> {it.name}
+                  </span>
+                  <span className="mono strong">{rp(it.subtotal)}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="draft-totals">
+              <div className="row"><span>Subtotal</span><span className="mono">{rp(subtotal)}</span></div>
+              <div className="row"><span>Ongkir (estimasi)</span><span className="mono">{rp(ongkir)}</span></div>
+              <div className="row total"><span>Total</span><span className="mono strong" data-testid="draft-total">{rp(c.total)}</span></div>
+            </div>
+
+            <div className="draft-actions">
+              <button
+                type="button"
+                className="gold-btn"
+                onClick={approveDraft}
+                data-testid="draft-approve-btn"
+                title="Approve & kirim konfirmasi ke pelanggan"
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Approve · 1-tap
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={rejectDraft}
+                data-testid="draft-reject-btn"
+              >
+                Tolak
+              </button>
+            </div>
+
+            <p className="draft-foot" data-testid="draft-linked">
+              {linkedApproval?.approval_id
+                ? <>Terhubung ke queue · <span className="mono">{linkedApproval.approval_id.slice(0, 8)}</span></>
+                : <>Draft lokal (belum tersinkron backend)</>}
+            </p>
+          </aside>
+        )}
       </div>
     </section>
   );
@@ -841,6 +971,26 @@ function Produk({ loading }) {
    KNOWLEDGE
    ============================================================ */
 function Knowledge() {
+  const [q, setQ] = React.useState("");
+  const [tag, setTag] = React.useState("all");
+
+  const tags = React.useMemo(() => {
+    const s = new Set(KB_DOCS.map((d) => d.tag));
+    return ["all", ...Array.from(s)];
+  }, []);
+
+  const filtered = KB_DOCS.filter((d) => (tag === "all" || d.tag === tag) && (!q || d.name.toLowerCase().includes(q.toLowerCase())));
+
+  const kindColor = (k) => ({
+    PDF: "danger", DOCX: "info", MD: "jade", XLSX: "gold", CSV: "muted",
+  }[k] || "muted");
+
+  const statusBadge = (s) => {
+    if (s === "syncing") return <span className="badge warn" data-testid="kb-status-syncing">syncing…</span>;
+    if (s === "stale") return <span className="badge bad" data-testid="kb-status-stale">perlu sinkron</span>;
+    return <span className="badge ok" data-testid="kb-status-synced">tersinkron</span>;
+  };
+
   return (
     <section className="view active">
       <article className="card kb-banner">
@@ -853,11 +1003,77 @@ function Knowledge() {
         </div>
         <span className="tag jade">grounding wajib</span>
       </article>
+
       <div className="kpi-grid three">
-        <article className="card kpi"><p className="kpi-label">Dokumen aktif</p><h2>8</h2><span className="delta up">2 diperbarui hari ini</span></article>
-        <article className="card kpi"><p className="kpi-label">Potongan terindeks</p><h2>1.284<small>chunk</small></h2><span className="delta">embedding tersinkron</span></article>
+        <article className="card kpi"><p className="kpi-label">Dokumen aktif</p><h2>{KB_DOCS.length}</h2><span className="delta up">2 diperbarui hari ini</span></article>
+        <article className="card kpi"><p className="kpi-label">Potongan terindeks</p><h2>{KB_DOCS.reduce((a, d) => a + d.chunks, 0).toLocaleString("id-ID")}<small>chunk</small></h2><span className="delta">embedding tersinkron</span></article>
         <article className="card kpi"><p className="kpi-label">Jawaban ber-sitasi</p><h2>96<small>%</small></h2><span className="delta up">target ≥ 90%</span></article>
       </div>
+
+      <article className="card" data-testid="kb-docs-card">
+        <div className="card-head">
+          <div>
+            <h3>Daftar dokumen</h3>
+            <p>Nama file, ukuran &amp; waktu sinkron terakhir · dipakai agent untuk grounding</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <label className="search kb-search-inline">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" /><path d="m16 16 4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <input type="text" placeholder="Cari nama dokumen…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="kb-search-input" />
+            </label>
+            <div className="chips">
+              {tags.map((t) => (
+                <button key={t} className={`chip ${tag === t ? "active" : ""}`} onClick={() => setTag(t)} data-testid={`kb-tag-${t}`}>
+                  {t === "all" ? "Semua" : t}
+                </button>
+              ))}
+            </div>
+            <button className="gold-btn sm" data-testid="kb-upload-btn" title="Unggah dokumen baru">+ Unggah</button>
+          </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="table kb-table" data-testid="kb-table">
+            <thead>
+              <tr>
+                <th style={{ width: "42%" }}>Nama dokumen</th>
+                <th>Tipe</th>
+                <th>Ukuran</th>
+                <th>Chunk</th>
+                <th>Terakhir sinkron</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: "center", color: "var(--muted)", padding: "18px 12px" }}>Dokumen tidak ditemukan</td></tr>
+              ) : filtered.map((d) => (
+                <tr key={d.id} data-testid={`kb-row-${d.id}`}>
+                  <td>
+                    <div className="kb-file">
+                      <span className={`kb-file-ico ${kindColor(d.kind)}`}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                          <path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                          <path d="M14 3v4h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <div>
+                        <b>{d.name}</b>
+                        <small className="mono">tag · {d.tag}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className="badge mono">{d.kind}</span></td>
+                  <td className="mono">{d.size}</td>
+                  <td className="mono">{d.chunks.toLocaleString("id-ID")}</td>
+                  <td className="mono">{d.lastSync}</td>
+                  <td>{statusBadge(d.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
     </section>
   );
 }
