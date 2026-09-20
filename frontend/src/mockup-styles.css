@@ -259,7 +259,10 @@ html[data-theme="light"] .theme-btn .i-moon{opacity:0;transform:rotate(90deg) sc
 
 .two-col{display:grid;grid-template-columns:1.55fr 1fr;gap:12px}
 .chart{width:100%}
-.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart > svg,.chart .recharts-wrapper > svg{width:100%;height:auto;display:block;overflow:visible}
+.chart .recharts-legend-wrapper svg,.chart .recharts-legend-item svg,.chart .recharts-legend-icon{width:10px!important;height:10px!important;display:inline-block!important;vertical-align:middle;flex:none}
+.chart .recharts-legend-item{align-items:center;gap:6px;padding:3px 0}
+.chart .recharts-legend-item .recharts-legend-item-text{margin-left:6px;vertical-align:middle}
 .chart text{font-family:"Bricolage Grotesque",sans-serif;font-size:10px;fill:var(--chart-text)}
 .chart .grid-line{stroke:var(--grid)}
 .chart .dot{fill:var(--chart-dot);stroke:var(--jade-text)}
