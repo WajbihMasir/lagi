@@ -9,10 +9,11 @@ import {
   AreaChart, Area,
 } from "recharts";
 import {
-  PERIODS as MOCK_PERIODS, rp, queue as mockQueue, initialTrx, prod, metrics, rep, initialConvs, DEMO_FLOWS, KB_DOCS, QUICK_REPLIES,
+  PERIODS as MOCK_PERIODS, rp, queue as mockQueue, initialTrx, prod as mockProd, metrics as mockMetrics, rep as mockRep, initialConvs as mockConvs, DEMO_FLOWS, KB_DOCS as mockKbDocs, QUICK_REPLIES,
 } from "@/data";
 import {
-  socket, useAnalytics, useApprovals, decideApproval, exportAnalyticsCSV, chatIntake,
+  socket, useAnalytics, useAnalyticsSummary, useApprovals, useOrders, useConversations, useProducts, useKb,
+  decideApproval, exportAnalyticsCSV, chatIntake, replyConversation, createProduct, updateProduct, deleteProduct, seedBackend,
 } from "@/api";
 
 /* ---------- palette (matches mockup jade/gold) ---------- */
@@ -80,15 +81,18 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [trxFilter, setTrxFilter] = useState("all");
   const [trx, setTrx] = useState(initialTrx);
-  const [convs, setConvs] = useState(initialConvs);
+  const [convs, setConvs] = useState(mockConvs);
   const [activeConv, setActiveConv] = useState(0);
   const [search, setSearch] = useState("");
   const [inboxPulse, setInboxPulse] = useState(0);
   const { show: toast, node: toastNode } = useToast();
 
-  /* B4: fetch analytics for the selected period; fallback to mock on failure */
+  /* Real backend queries; mock data only as offline fallback */
   const analyticsQ = useAnalytics(period);
+  const summaryQ = useAnalyticsSummary(period);
   const approvalsQ = useApprovals("pending");
+  const ordersQ = useOrders({ limit: 100 });
+  const convsQ = useConversations(50);
 
   const currentPeriod = useMemo(() => {
     const mock = MOCK_PERIODS[period] || MOCK_PERIODS.today;
@@ -113,7 +117,7 @@ export default function App() {
   const queue = useMemo(() => {
     if (!approvalsQ.data || !approvalsQ.data.items || approvalsQ.data.items.length === 0) return mockQueue;
     return approvalsQ.data.items.map((a) => ({
-      n: a.order?.customer_id || a.trace_id.slice(0, 8),
+      n: a.order?.customer_id || (a.trace_id || "").slice(0, 8),
       d: (a.order?.items || []).map((it) => `${it.qty} pcs ${it.name}`).join(" · ") || "Draft pesanan",
       a: a.order?.total || 0,
       s: a.reminder_sent ? "jade" : "",
@@ -121,6 +125,59 @@ export default function App() {
       order_id: a.order_id,
     }));
   }, [approvalsQ.data]);
+
+  /* Real KPI from /analytics/summary; fallback to static cards when offline */
+  const summaryKpi = summaryQ.data?.kpi || null;
+
+  /* Sync real transactions from /orders into trx state (preserve local demo rows) */
+  useEffect(() => {
+    const items = ordersQ.data?.items;
+    if (!items || items.length === 0) return;
+    const beRows = items.map((o) => {
+      const mins = Math.max(0, Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000)) || 0;
+      const code = o.status === "pending_approval" ? "warn" : (o.status === "approved" || o.status === "modified" ? "ok" : "bad");
+      const label = o.status === "pending_approval" ? "Pending approval" : (code === "ok" ? "Terkonfirmasi" : o.status);
+      const summary = (o.items || []).map((it) => `${it.name} ×${it.qty}`).join(", ").slice(0, 60) || "—";
+      return [o.order_id, o.customer_id, summary, o.total, code, label, mins, false, `be-${o.order_id}`];
+    });
+    setTrx((prev) => {
+      const existing = new Set(prev.map((r) => r[0]));
+      const fresh = beRows.filter((r) => !existing.has(r[0]));
+      if (fresh.length === 0) return prev;
+      // Replace mock initial rows once real data arrives
+      const withoutMock = prev.filter((r) => !String(r[8] || "").startsWith("wa-") || String(r[0]).startsWith("TU-25"));
+      const base = prev === initialTrx ? [] : withoutMock;
+      return [...fresh, ...base.length ? base : prev.filter((r) => String(r[8] || "").startsWith("wa-"))];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordersQ.data]);
+
+  /* Sync real inbox from /conversations into convs state */
+  useEffect(() => {
+    const items = convsQ.data?.items;
+    if (!items || items.length === 0) return;
+    const beConvs = items.map((c) => ({
+      id: c.draft?.order_id || c.trace_id || c.customer_id,
+      n: c.customer_id,
+      ini: String(c.customer_id || "??").slice(0, 2).toUpperCase(),
+      ch: c.channel || "WhatsApp",
+      phone: c.customer_id,
+      last: c.last || "",
+      time: c.time || "",
+      unread: 0,
+      state: c.state || "answered",
+      total: c.total || 0,
+      thread: [[c.last_role === "owner" ? "agent" : "cust", c.last || "", c.time || ""]],
+    }));
+    setConvs((prev) => {
+      const names = new Set(prev.map((c) => c.n));
+      const fresh = beConvs.filter((c) => !names.has(c.n));
+      if (fresh.length === 0) return prev;
+      if (prev === mockConvs) return [...fresh];
+      return [...fresh, ...prev];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convsQ.data]);
 
   useEffect(() => {
     const applyHash = () => {
@@ -151,16 +208,18 @@ export default function App() {
   // B3 realtime: connect socket and refetch on relevant events
   useEffect(() => {
     socket.connect();
-    const onApproval = (p) => { toast(`Approval baru · ${p.order_id || p.approval_id}`); approvalsQ.refetch?.(); setInboxPulse((n) => n + 1); };
-    const onDecided = (p) => { toast(`Approval ${p.decision} · ${p.order_id || ""}`); approvalsQ.refetch?.(); analyticsQ.refetch?.(); };
+    const onApproval = (p) => { toast(`Approval baru · ${p.order_id || p.approval_id}`); approvalsQ.refetch?.(); ordersQ.refetch?.(); convsQ.refetch?.(); setInboxPulse((n) => n + 1); };
+    const onDecided = (p) => { toast(`Approval ${p.decision} · ${p.order_id || ""}`); approvalsQ.refetch?.(); analyticsQ.refetch?.(); summaryQ.refetch?.(); ordersQ.refetch?.(); convsQ.refetch?.(); };
     const onChat = (p) => {
       if (p.auto) toast("Auto-response terkirim ke pelanggan");
+      convsQ.refetch?.();
+      ordersQ.refetch?.();
       setInboxPulse((n) => n + 1);
     };
-    const onTrace = () => { analyticsQ.refetch?.(); };
+    const onTrace = () => { analyticsQ.refetch?.(); summaryQ.refetch?.(); };
     socket.on("approval:required", onApproval);
     socket.on("approval:decided", onDecided);
-    socket.on("approval:reminder", (p) => toast(`Reminder approval ${p.approval_id.slice(0, 8)}`));
+    socket.on("approval:reminder", (p) => toast(`Reminder approval ${(p.approval_id || "").slice(0, 8)}`));
     socket.on("chat:new", onChat);
     socket.on("trace:update", onTrace);
     return () => {
@@ -218,13 +277,16 @@ export default function App() {
       channel: "WhatsApp",
     })
       .then((res) => {
-        toast(`Trace ${res.trace_id.slice(0, 8)} · ${res.status}`);
+        toast(`Trace ${(res.trace_id || "").slice(0, 8)} · ${res.status}`);
         if (res.draft) {
           const row = [res.draft.order_id, c.n, firstCust.slice(0, 40), res.draft.total, "warn", "Pending approval", 0, false, `wa-be-${Date.now()}`];
           setTrx((prev) => [row, ...prev]);
         }
         approvalsQ.refetch?.();
         analyticsQ.refetch?.();
+        summaryQ.refetch?.();
+        ordersQ.refetch?.();
+        convsQ.refetch?.();
       })
       .catch((err) => {
         // Fallback ke local push (cascade PRD:217)
@@ -243,7 +305,7 @@ export default function App() {
         // fallback local CSV from mock data
         const rows = [
           ["Periode", "Order", "Omzet", "Akurasi", "Intervensi"],
-          ...rep.map((r) => [r[0], r[1], r[2], r[3], r[4]]),
+          ...mockRep.map((r) => [r[0], r[1], r[2], r[3], r[4]]),
         ];
         downloadCSV(`tuntas-umkm-report-${period}-${Date.now()}.csv`, rows);
         toast("Ekspor CSV (fallback lokal)");
@@ -252,12 +314,12 @@ export default function App() {
 
   const approveFromQueue = (approval_id) => {
     decideApproval(approval_id, "approve", { reason: "operator ok" })
-      .then((r) => { toast(`Order ${r.order.order_id} approved`); approvalsQ.refetch(); analyticsQ.refetch(); })
+      .then((r) => { toast(`Order ${r.order.order_id} approved`); approvalsQ.refetch(); analyticsQ.refetch(); ordersQ.refetch?.(); summaryQ.refetch?.(); })
       .catch(() => toast("Gagal approve"));
   };
   const rejectFromQueue = (approval_id) => {
     decideApproval(approval_id, "reject", { reason: "operator tolak" })
-      .then(() => { toast("Rejected"); approvalsQ.refetch(); })
+      .then(() => { toast("Rejected"); approvalsQ.refetch(); ordersQ.refetch?.(); })
       .catch(() => toast("Gagal reject"));
   };
 
@@ -401,7 +463,7 @@ export default function App() {
         </header>
 
         {view === "ringkasan" && (
-          <Ringkasan loading={loading} currentPeriod={currentPeriod} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
+          <Ringkasan loading={loading} currentPeriod={currentPeriod} summaryKpi={summaryKpi} exportCSV={exportCSV} onOpenQueue={() => goView("inbox")} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
         )}
         {view === "inbox" && (
           <Inbox loading={loading} convs={convs} setConvs={setConvs} activeConv={activeConv} setActiveConv={setActiveConv} pushToast={toast} queue={queue} onApprove={approveFromQueue} onReject={rejectFromQueue} />
@@ -422,7 +484,7 @@ export default function App() {
 /* ============================================================
    RINGKASAN — 4 Recharts (LineChart, BarChart, PieChart, AreaChart)
    ============================================================ */
-function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onApprove, onReject }) {
+function Ringkasan({ loading, currentPeriod, summaryKpi, exportCSV, onOpenQueue, queue, onApprove, onReject }) {
   const omzetData = currentPeriod.omzet.map((v, i) => ({
     day: ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][i] || `D${i + 1}`,
     omzet: v,
@@ -431,12 +493,19 @@ function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onAp
   const intentData = currentPeriod.intent;
   const responseData = currentPeriod.response;
 
-  const kpiCards = [
-    { label: "Order masuk via chat", val: "48", delta: "+12,4% vs kemarin", up: true },
-    { label: "Omzet terkonfirmasi", val: "Rp 9,4", unit: "jt", delta: "+6,1% vs kemarin", up: true },
-    { label: "Akurasi ekstraksi order", val: "94", unit: "%", delta: "target ≥ 90%", up: true },
-    { label: "Intervensi manual", val: "7", unit: "%", delta: "−2,3% vs kemarin", up: false },
-  ];
+  const kpiCards = summaryKpi
+    ? [
+        { label: "Order masuk via chat", val: String(summaryKpi.orders ?? 0), delta: `${summaryKpi.events ?? 0} events`, up: true },
+        { label: "Omzet terkonfirmasi", val: `Rp ${(Number(summaryKpi.omzet || 0) / 1000000).toFixed(1).replace(".", ",")}`, unit: "jt", delta: "real dari backend", up: true },
+        { label: "Akurasi ekstraksi order", val: String(summaryKpi.akurasi ?? 0), unit: "%", delta: "target ≥ 90%", up: true },
+        { label: "Pending approval", val: String(summaryKpi.pending_approvals ?? 0), delta: `auto_hold ${summaryKpi.auto_hold ?? 0}`, up: false },
+      ]
+    : [
+        { label: "Order masuk via chat", val: "48", delta: "+12,4% vs kemarin", up: true },
+        { label: "Omzet terkonfirmasi", val: "Rp 9,4", unit: "jt", delta: "+6,1% vs kemarin", up: true },
+        { label: "Akurasi ekstraksi order", val: "94", unit: "%", delta: "target ≥ 90%", up: true },
+        { label: "Intervensi manual", val: "7", unit: "%", delta: "−2,3% vs kemarin", up: false },
+      ];
 
   return (
     <section className="view active">
@@ -486,7 +555,7 @@ function Ringkasan({ loading, currentPeriod, exportCSV, onOpenQueue, queue, onAp
         </Card>
 
         <article className="card" data-testid="approval-queue">
-          <div className="card-head"><div><h3>Menunggu approval</h3><p>Agent tidak eksekusi tanpa izin</p></div><span className="tag">6</span></div>
+          <div className="card-head"><div><h3>Menunggu approval</h3><p>Agent tidak eksekusi tanpa izin</p></div><span className="tag">{queue.length}</span></div>
           {loading ? (
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }} data-testid="skeleton-queue">
               {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} style={{ height: 44, borderRadius: 10 }} />)}
@@ -651,13 +720,17 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast,
       if (i !== activeConv) return cv;
       return {
         ...cv,
-        thread: [...cv.thread, ["agent", text, stamp]],
+        thread: [...(cv.thread || []), ["agent", text, stamp]],
         last: text.length > 46 ? text.slice(0, 46) + "…" : text,
         time: stamp,
         unread: 0,
       };
     }));
     setDraft("");
+    // Best-effort persist to backend; keep optimistic UI on failure
+    if (c.n && !String(c.n).startsWith("demo-")) {
+      replyConversation(c.n, text, c.ch || "WhatsApp").catch(() => {});
+    }
     pushToast?.("Balasan manual terkirim");
   };
 
@@ -670,10 +743,11 @@ function Inbox({ loading, convs, setConvs, activeConv, setActiveConv, pushToast,
 
   // AI intent detection — panel muncul kalau state=pending_approval & ada total
   const hasDraft = !!(c && c.state === "pending_approval" && c.total > 0);
-  // Coba matching approval dari queue berdasarkan customer name / order id
+  // Matching approval longgar (trim/lower) agar nama BE vs mock tetap ketemu
   const linkedApproval = React.useMemo(() => {
     if (!c) return null;
-    return queue.find((q) => q.n === c.n || q.n === c.id) || null;
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    return queue.find((q) => norm(q.n) === norm(c.n) || norm(q.n) === norm(c.id) || norm(q.order_id) === norm(c.id)) || null;
   }, [c, queue]);
 
   const draftItems = React.useMemo(() => {
@@ -924,37 +998,101 @@ function Transaksi({ loading, trx, trxFilter, setTrxFilter, search, exportCSV })
    PRODUK
    ============================================================ */
 function Produk({ loading }) {
+  const [q, setQ] = React.useState("");
+  const [showForm, setShowForm] = React.useState(false);
+  const [form, setForm] = React.useState({ sku: "", name: "", price: "", stock: "", cap: "", category: "Snack", description: "" });
+  const [err, setErr] = React.useState("");
+  const productsQ = useProducts(q, "");
+  const items = productsQ.data?.items || mockProd.map((p) => ({ sku: p[0], name: p[1], category: p[2], price: p[3], stock: p[4], cap: p[5] }));
+  const skuAktif = productsQ.data?.total ?? items.length;
+  const kritis = items.filter((p) => p.cap > 0 && (p.stock / p.cap) * 100 < 20).length;
+  const nilai = items.reduce((a, p) => a + Number(p.price || 0) * Number(p.stock || 0), 0);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr("");
+    try {
+      await createProduct({
+        sku: form.sku.trim().toUpperCase(),
+        name: form.name.trim(),
+        price: Number(form.price),
+        stock: Number(form.stock),
+        cap: Number(form.cap || form.stock),
+        category: form.category,
+        description: form.description,
+        variants: [],
+      });
+      setShowForm(false);
+      setForm({ sku: "", name: "", price: "", stock: "", cap: "", category: "Snack", description: "" });
+      productsQ.refetch?.();
+    } catch (ex) {
+      setErr(ex?.response?.data?.detail || "Gagal tambah produk (cek SKU unik & price>0)");
+    }
+  };
+
+  const del = async (sku) => {
+    if (!window.confirm(`Hapus ${sku}?`)) return;
+    try {
+      await deleteProduct(sku);
+      productsQ.refetch?.();
+    } catch {
+      setErr("Gagal hapus produk");
+    }
+  };
+
   return (
     <section className="view active">
       <div className="kpi-grid three">
-        <article className="card kpi"><p className="kpi-label">SKU aktif</p><h2>24</h2><span className="delta">katalog tersinkron</span></article>
-        <article className="card kpi"><p className="kpi-label">Stok kritis</p><h2>4</h2><span className="delta down">perlu restock</span></article>
-        <article className="card kpi"><p className="kpi-label">Nilai persediaan</p><h2>Rp 31,8<small>jt</small></h2><span className="delta up">+3,2%</span></article>
+        <article className="card kpi"><p className="kpi-label">SKU aktif</p><h2>{skuAktif}</h2><span className="delta">katalog tersinkron</span></article>
+        <article className="card kpi"><p className="kpi-label">Stok kritis</p><h2>{kritis}</h2><span className="delta down">perlu restock</span></article>
+        <article className="card kpi"><p className="kpi-label">Nilai persediaan</p><h2>{rp(Math.round(nilai))}</h2><span className="delta up">real dari backend</span></article>
       </div>
       <article className="card">
-        <div className="card-head"><div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div><button className="gold-btn sm">+ Produk</button></div>
+        <div className="card-head">
+          <div><h3>Produk &amp; stok</h3><p>Sumber jawaban agent untuk pertanyaan stok &amp; harga</p></div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="period-date" placeholder="Cari SKU/nama…" value={q} onChange={(e) => setQ(e.target.value)} data-testid="produk-search" style={{ minWidth: 180 }} />
+            <button className="gold-btn sm" onClick={() => setShowForm((s) => !s)} data-testid="produk-add-btn">+ Produk</button>
+            <button className="ghost-btn sm" onClick={() => { seedBackend().then(() => productsQ.refetch?.()); }} data-testid="produk-seed-btn">Seed 50 produk</button>
+          </div>
+        </div>
+        {err && <div style={{ padding: "8px 12px", color: "var(--danger)" }} role="alert">{err}</div>}
+        {showForm && (
+          <form onSubmit={submit} style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12 }} data-testid="produk-form">
+            <input required placeholder="SKU MIS: KRP-01" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="period-date" />
+            <input required placeholder="Nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="period-date" />
+            <input required type="number" min="1" placeholder="Harga" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="period-date" />
+            <input required type="number" min="0" placeholder="Stok" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} className="period-date" />
+            <input type="number" min="0" placeholder="Cap" value={form.cap} onChange={(e) => setForm({ ...form, cap: e.target.value })} className="period-date" />
+            <input placeholder="Kategori" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="period-date" />
+            <button className="gold-btn sm" type="submit">Simpan</button>
+          </form>
+        )}
         <div className="table-wrap">
-          {loading ? (
+          {loading || productsQ.isLoading ? (
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
               {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} style={{ height: 40, borderRadius: 8 }} />)}
             </div>
           ) : (
             <table className="table">
-              <thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Produk</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status</th><th></th></tr></thead>
               <tbody>
-                {prod.map((p) => {
-                  const pct = Math.round((p[4] / p[5]) * 100), low = pct < 20;
+                {items.length === 0 ? (
+                  <tr><td colSpan="7" style={{ textAlign: "center", color: "var(--muted)", padding: 18 }}>Tidak ada produk — klik Seed 50 produk</td></tr>
+                ) : items.map((p) => {
+                  const pct = p.cap > 0 ? Math.round((p.stock / p.cap) * 100) : 100, low = pct < 20;
                   return (
-                    <tr key={p[0]}>
-                      <td className="mono">{p[0]}</td>
-                      <td className="strong">{p[1]}</td>
-                      <td className="mono">{p[2]}</td>
-                      <td>{rp(p[3])}</td>
+                    <tr key={p.sku}>
+                      <td className="mono">{p.sku}</td>
+                      <td className="strong">{p.name}</td>
+                      <td className="mono">{p.category}</td>
+                      <td>{rp(Number(p.price || 0))}</td>
                       <td>
                         <div className={`stockbar ${low ? "low" : ""}`}><i style={{ width: `${Math.min(pct, 100)}%` }}></i></div>
-                        <span className="mono">{p[4]} / {p[5]} pcs</span>
+                        <span className="mono">{p.stock} / {p.cap} pcs</span>
                       </td>
                       <td><span className={`badge ${low ? "bad" : "ok"}`}>{low ? "Stok kritis" : "Aman"}</span></td>
+                      <td><button className="ghost-btn sm" onClick={() => del(p.sku)} data-testid={`produk-del-${p.sku}`}>Hapus</button></td>
                     </tr>
                   );
                 })}
@@ -973,13 +1111,15 @@ function Produk({ loading }) {
 function Knowledge() {
   const [q, setQ] = React.useState("");
   const [tag, setTag] = React.useState("all");
+  const kbQ = useKb(q, tag);
+  const docs = kbQ.data?.items || mockKbDocs;
 
   const tags = React.useMemo(() => {
-    const s = new Set(KB_DOCS.map((d) => d.tag));
+    const s = new Set(docs.map((d) => d.tag));
     return ["all", ...Array.from(s)];
-  }, []);
+  }, [docs]);
 
-  const filtered = KB_DOCS.filter((d) => (tag === "all" || d.tag === tag) && (!q || d.name.toLowerCase().includes(q.toLowerCase())));
+  const filtered = docs.filter((d) => (tag === "all" || d.tag === tag) && (!q || d.name.toLowerCase().includes(q.toLowerCase())));
 
   const kindColor = (k) => ({
     PDF: "danger", DOCX: "info", MD: "jade", XLSX: "gold", CSV: "muted",
@@ -1005,8 +1145,8 @@ function Knowledge() {
       </article>
 
       <div className="kpi-grid three">
-        <article className="card kpi"><p className="kpi-label">Dokumen aktif</p><h2>{KB_DOCS.length}</h2><span className="delta up">2 diperbarui hari ini</span></article>
-        <article className="card kpi"><p className="kpi-label">Potongan terindeks</p><h2>{KB_DOCS.reduce((a, d) => a + d.chunks, 0).toLocaleString("id-ID")}<small>chunk</small></h2><span className="delta">embedding tersinkron</span></article>
+        <article className="card kpi"><p className="kpi-label">Dokumen aktif</p><h2>{docs.length}</h2><span className="delta up">{kbQ.data ? "real dari backend" : "offline fallback"}</span></article>
+        <article className="card kpi"><p className="kpi-label">Potongan terindeks</p><h2>{docs.reduce((a, d) => a + (d.chunks || 0), 0).toLocaleString("id-ID")}<small>chunk</small></h2><span className="delta">embedding tersinkron</span></article>
         <article className="card kpi"><p className="kpi-label">Jawaban ber-sitasi</p><h2>96<small>%</small></h2><span className="delta up">target ≥ 90%</span></article>
       </div>
 
@@ -1083,6 +1223,22 @@ function Knowledge() {
    ============================================================ */
 function Laporan({ loading, currentPeriod, exportCSV }) {
   const kategoriData = currentPeriod.kategori;
+  const summaryQ = useAnalyticsSummary("week");
+  const kpi = summaryQ.data?.kpi;
+  const metricsReal = kpi
+    ? [
+        ["Order terkonfirmasi", Math.min(100, (kpi.orders || 0) * 10), `${kpi.orders ?? 0} order`],
+        ["Akurasi ekstraksi order", Number(kpi.akurasi || 0), "target ≥ 90%"],
+        ["Pending approval", Math.min(100, (kpi.pending_approvals || 0) * 10), `${kpi.pending_approvals ?? 0} menunggu`],
+        ["Auto-hold (timeout)", Math.min(100, (kpi.auto_hold || 0) * 10), `${kpi.auto_hold ?? 0} timeout`],
+        ["Events logged", Math.min(100, kpi.events || 0), `${kpi.events ?? 0} events`],
+      ]
+    : mockMetrics;
+  const repReal = kpi
+    ? [
+        ["Minggu berjalan", kpi.orders ?? 0, kpi.omzet ?? 0, `${kpi.akurasi ?? 0}%`, `${kpi.pending_approvals ?? 0} pending`],
+      ]
+    : mockRep;
 
   return (
     <section className="view active">
@@ -1111,9 +1267,9 @@ function Laporan({ loading, currentPeriod, exportCSV }) {
         </Card>
 
         <article className="card">
-          <div className="card-head"><div><h3>Performa agent</h3><p>Metrik kualitas terhadap target</p></div></div>
+          <div className="card-head"><div><h3>Performa agent</h3><p>Metrik kualitas terhadap target {kpi ? "· real dari backend" : "· offline fallback"}</p></div></div>
           <ul className="metrics">
-            {metrics.map((m, i) => (
+            {metricsReal.map((m, i) => (
               <li key={i}>
                 <p><span>{m[0]}</span><b>{m[1]}%</b></p>
                 <div className="bar"><i style={{ width: `${m[1]}%` }}></i></div>
@@ -1130,7 +1286,7 @@ function Laporan({ loading, currentPeriod, exportCSV }) {
           <table className="table">
             <thead><tr><th>Periode</th><th>Order</th><th>Omzet</th><th>Akurasi</th><th>Intervensi</th></tr></thead>
             <tbody>
-              {rep.map((r, i) => (
+              {repReal.map((r, i) => (
                 <tr key={i}>
                   <td className="strong">{r[0]}</td>
                   <td>{r[1]}</td>

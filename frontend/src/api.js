@@ -42,10 +42,77 @@ export function useApprovals(status = "pending") {
   });
 }
 
-export function useProducts() {
+export function useProducts(search, kategori) {
   return useQuery({
-    queryKey: ["products"],
-    queryFn: async () => (await api.get("/products")).data,
+    queryKey: ["products", search || "", kategori || ""],
+    queryFn: async () =>
+      (
+        await api.get("/products", {
+          params: { ...(search ? { search } : {}), ...(kategori ? { kategori } : {}) },
+        })
+      ).data,
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useAnalyticsSummary(period = "today") {
+  return useQuery({
+    queryKey: ["analytics-summary", period],
+    queryFn: async () => (await api.get("/analytics/summary", { params: { period } })).data,
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useOrders(params = {}) {
+  const { status, q, customer_id, limit = 50 } = params;
+  return useQuery({
+    queryKey: ["orders", status || "", q || "", customer_id || "", limit],
+    queryFn: async () =>
+      (
+        await api.get("/orders", {
+          params: {
+            ...(status ? { status } : {}),
+            ...(q ? { q } : {}),
+            ...(customer_id ? { customer_id } : {}),
+            limit,
+          },
+        })
+      ).data,
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useConversations(limit = 50) {
+  return useQuery({
+    queryKey: ["conversations", limit],
+    queryFn: async () => (await api.get("/conversations", { params: { limit } })).data,
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useConversation(customer_id) {
+  return useQuery({
+    queryKey: ["conversation", customer_id],
+    queryFn: async () => (await api.get(`/conversations/${encodeURIComponent(customer_id)}`)).data,
+    enabled: !!customer_id,
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useKb(q, tag) {
+  return useQuery({
+    queryKey: ["kb", q || "", tag || ""],
+    queryFn: async () =>
+      (
+        await api.get("/kb", {
+          params: { ...(q ? { q } : {}), ...(tag && tag !== "all" ? { tag } : {}) },
+        })
+      ).data,
     staleTime: 60_000,
     retry: 1,
   });
@@ -57,6 +124,15 @@ export const decideApproval = (id, action, body = {}) =>
 
 export const chatIntake = (payload) =>
   api.post("/chat/intake", payload).then((r) => r.data);
+
+export const replyConversation = (customer_id, text, channel = "WhatsApp") =>
+  api.post(`/conversations/${encodeURIComponent(customer_id)}/reply`, { text, channel }).then((r) => r.data);
+
+export const createProduct = (body) => api.post("/products", body).then((r) => r.data);
+export const updateProduct = (sku, body) => api.put(`/products/${encodeURIComponent(sku)}`, body).then((r) => r.data);
+export const deleteProduct = (sku) => api.delete(`/products/${encodeURIComponent(sku)}`).then((r) => r.data);
+export const seedBackend = () => api.post("/seed").then((r) => r.data);
+export const createKb = (body) => api.post("/kb", body).then((r) => r.data);
 
 export const exportAnalyticsCSV = async (period) => {
   const res = await api.get("/analytics/export", { params: { period }, responseType: "blob" });

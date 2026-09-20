@@ -161,3 +161,34 @@ class AnalyticsEvent(BaseModel):
     approval_status: str = "n/a"
     response_time_ms: int = 0
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------- Knowledge Base (FE P6: kb_docs, additive, no breaking change) ----------
+class KbDocCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    doc_id: str | None = None
+    name: str
+    kind: str = "MD"
+    size: str = "0 KB"
+    chunks: int = 0
+    tag: str = "umum"
+    status: Literal["synced", "syncing", "stale"] = "synced"
+
+
+class KbDoc(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    doc_id: str = Field(default_factory=lambda: f"KB-{uuid.uuid4().hex[:6].upper()}")
+    name: str
+    kind: str = "MD"
+    size: str = "0 KB"
+    chunks: int = 0
+    lastSync: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    status: Literal["synced", "syncing", "stale"] = "synced"
+    tag: str = "umum"
+
+
+# ---------- Conversations (FE P4: manual owner reply) ----------
+class ConversationReplyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    text: str
+    channel: str = "WhatsApp"

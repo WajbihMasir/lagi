@@ -222,3 +222,33 @@ def get_personas_seed() -> list[dict]:
         }
         for (pid, name, phone, ch, seg, notes) in _PERSONAS
     ]
+
+
+# ---- 8 dokumen KB (mirror frontend KB_DOCS, additive untuk FE P6) ----
+_KB_DOCS = [
+    ("kb-01", "Katalog Produk & Harga 2026.pdf", "PDF", "412 KB", 184, "harga", "synced"),
+    ("kb-02", "SOP Balas Chat Pelanggan.md", "MD", "38 KB", 42, "sop", "synced"),
+    ("kb-03", "FAQ Reseller & Grosir.docx", "DOCX", "91 KB", 76, "reseller", "synced"),
+    ("kb-04", "Kebijakan Retur & Komplain.pdf", "PDF", "128 KB", 58, "kebijakan", "synced"),
+    ("kb-05", "Tarif Ongkir Ekspedisi.xlsx", "XLSX", "76 KB", 63, "ongkir", "syncing"),
+    ("kb-06", "Bundling & Promo Berjalan.pdf", "PDF", "204 KB", 91, "promo", "synced"),
+    ("kb-07", "Skrip Follow-up Pesanan.md", "MD", "22 KB", 27, "sop", "synced"),
+    ("kb-08", "Jadwal Restock Mingguan.csv", "CSV", "12 KB", 19, "stok", "stale"),
+]
+
+
+def get_kb_docs_seed() -> list[dict]:
+    now = _now_iso()
+    return [
+        {
+            "doc_id": doc_id,
+            "name": name,
+            "kind": kind,
+            "size": size,
+            "chunks": chunks,
+            "tag": tag,
+            "status": status,
+            "lastSync": now,
+        }
+        for (doc_id, name, kind, size, chunks, tag, status) in _KB_DOCS
+    ]

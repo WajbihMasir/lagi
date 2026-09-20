@@ -33,6 +33,9 @@ from models import (
     ApprovalDecisionRequest,
     AnalyticsEvent,
     ChatIntakeRequest,
+    ConversationReplyRequest,
+    KbDoc,
+    KbDocCreate,
     Product,
     ProductCreate,
     ProductUpdate,
@@ -49,7 +52,7 @@ from pipeline import (
     tool_cek_stok,
     tool_hitung_ongkir,
 )
-from seed_data import get_personas_seed, get_products_seed
+from seed_data import get_kb_docs_seed, get_personas_seed, get_products_seed
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -132,7 +135,13 @@ async def _startup_indexes() -> None:
     )
     await db.workflow_traces.create_index("trace_id", unique=True)
     await db.workflow_traces.create_index("dedup_hash")
+    await db.workflow_traces.create_index([("customer_id", 1), ("created_at", -1)])
     await db.conversations.create_index("conversation_id", unique=True)
+    await db.conversations.create_index([("customer_id", 1), ("created_at", -1)])
+    await db.conversations.create_index([("trace_id", 1), ("created_at", 1)])
+    await db.orders.create_index([("status", 1), ("created_at", -1)])
+    await db.orders.create_index([("customer_id", 1), ("created_at", -1)])
+    await db.kb_docs.create_index("doc_id", unique=True)
     await db.approvals.create_index("approval_id", unique=True)
     await db.approvals.create_index([("order_id", 1), ("status", 1)])
     await db.analytics_events.create_index("event_id", unique=True)
@@ -160,6 +169,7 @@ async def root():
 async def seed_data():
     products = get_products_seed()
     personas = get_personas_seed()
+    kb_docs = get_kb_docs_seed()
 
     p_inserted = p_updated = 0
     for p in products:
@@ -179,10 +189,21 @@ async def seed_data():
         elif res.modified_count:
             ps_updated += 1
 
+    kb_inserted = kb_updated = 0
+    for kb in kb_docs:
+        res = await db.kb_docs.update_one(
+            {"doc_id": kb["doc_id"]}, {"$set": kb}, upsert=True
+        )
+        if res.upserted_id is not None:
+            kb_inserted += 1
+        elif res.modified_count:
+            kb_updated += 1
+
     return {
         "ok": True,
         "products": {"total": len(products), "inserted": p_inserted, "updated": p_updated},
         "personas": {"total": len(personas), "inserted": ps_inserted, "updated": ps_updated},
+        "kb_docs": {"total": len(kb_docs), "inserted": kb_inserted, "updated": kb_updated},
     }
 
 
@@ -528,9 +549,12 @@ async def _approval_timeout_task(approval_id: str) -> None:
         cur = await db.approvals.find_one({"approval_id": approval_id}, {"_id": 0})
         if not cur or cur["status"] != "pending":
             return
+        trace = await db.workflow_traces.find_one({"trace_id": cur["trace_id"]}, {"_id": 0})
         await db.conversations.insert_one({
             "conversation_id": f"CV-{uuid.uuid4().hex[:10]}",
             "trace_id": cur["trace_id"],
+            "customer_id": (trace or {}).get("customer_id", ""),
+            "channel": (trace or {}).get("channel", "WhatsApp"),
             "role": "agent",
             "text": "Pesanan sedang diproses, mohon tunggu konfirmasi pemilik ya Kak 🙏",
             "auto": True,
@@ -672,7 +696,8 @@ async def _apply_decision(
                 "unit_price": prod["price"], "name": prod["name"],
             })
             subtotal += prod["price"] * qty
-        ongkir = min(50000, 15000 + 500 * sum(i["qty"] for i in enriched))
+        ongkir_r = await tool_hitung_ongkir(enriched)
+        ongkir = int(ongkir_r["ongkir"])
         total = subtotal + ongkir
         await db.orders.update_one(
             {"order_id": apv["order_id"]},
@@ -943,6 +968,158 @@ async def analytics_export(period: str = "today"):
             "Content-Disposition": f'attachment; filename="tuntas-analytics-{period}-{int(time.time())}.csv"'
         },
     )
+
+
+# ================= Orders (FE P3: read-only list, additive) =================
+@api_router.get("/orders")
+async def list_orders(
+    status: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    customer_id: str | None = Query(default=None),
+    limit: int = Query(default=50, le=200),
+):
+    query: dict = {}
+    if status:
+        query["status"] = status
+    if customer_id:
+        query["customer_id"] = customer_id
+    if q:
+        query["$or"] = [
+            {"order_id": {"$regex": q, "$options": "i"}},
+            {"customer_id": {"$regex": q, "$options": "i"}},
+            {"items.name": {"$regex": q, "$options": "i"}},
+        ]
+    cursor = db.orders.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    return {"total": len(docs), "items": docs}
+
+
+@api_router.get("/orders/{order_id}")
+async def get_order(order_id: str):
+    doc = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"order {order_id} not found")
+    return doc
+
+
+# ================= Conversations (FE P4: inbox grouping, additive) =================
+@api_router.get("/conversations")
+async def list_conversations(limit: int = Query(default=50, le=200)):
+    pipeline = [
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$customer_id",
+            "last_message": {"$first": "$text"},
+            "last_role": {"$first": "$role"},
+            "last_at": {"$first": "$created_at"},
+            "channel": {"$first": "$channel"},
+            "trace_id": {"$first": "$trace_id"},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"last_at": -1}},
+        {"$limit": limit},
+    ]
+    rows = await db.conversations.aggregate(pipeline).to_list(length=limit)
+    items = [
+        {
+            "customer_id": r["_id"] or "unknown",
+            "last": r.get("last_message", ""),
+            "last_role": r.get("last_role", ""),
+            "time": (r.get("last_at", "") or "")[11:16] if r.get("last_at") else "",
+            "channel": r.get("channel", "WhatsApp"),
+            "trace_id": r.get("trace_id", ""),
+            "count": r.get("count", 0),
+        }
+        for r in rows
+        if r["_id"]
+    ]
+    # enrich with pending draft order (if any)
+    for it in items:
+        order = await db.orders.find_one(
+            {"customer_id": it["customer_id"], "status": "pending_approval"},
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+        trace = await db.workflow_traces.find_one(
+            {"trace_id": it["trace_id"]}, {"_id": 0}
+        ) if it.get("trace_id") else None
+        it["draft"] = order
+        it["state"] = (
+            "pending_approval" if order
+            else ((trace or {}).get("status", "answered") or "answered")
+        )
+        it["total"] = (order or {}).get("total", 0)
+    return {"total": len(items), "items": items}
+
+
+@api_router.get("/conversations/{customer_id}")
+async def get_conversation(customer_id: str, limit: int = Query(default=100, le=500)):
+    cursor = (
+        db.conversations.find({"customer_id": customer_id}, {"_id": 0})
+        .sort("created_at", 1)
+        .limit(limit)
+    )
+    docs = await cursor.to_list(length=limit)
+    order = await db.orders.find_one(
+        {"customer_id": customer_id, "status": "pending_approval"},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    return {"customer_id": customer_id, "total": len(docs), "thread": docs, "draft": order}
+
+
+@api_router.post("/conversations/{customer_id}/reply")
+async def reply_conversation(customer_id: str, payload: ConversationReplyRequest):
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="text required")
+    doc = {
+        "conversation_id": f"CV-{uuid.uuid4().hex[:10]}",
+        "trace_id": "",
+        "customer_id": customer_id,
+        "channel": payload.channel or "WhatsApp",
+        "role": "owner",
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.conversations.insert_one({**doc})
+    await sio.emit("chat:new", {
+        "customer_id": customer_id,
+        "channel": doc["channel"],
+        "reply": text,
+        "role": "owner",
+    })
+    return doc
+
+
+# ================= Knowledge Base (FE P6: kb_docs, additive) =================
+@api_router.get("/kb")
+async def list_kb(
+    q: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
+    limit: int = Query(default=100, le=200),
+):
+    query: dict = {}
+    if tag:
+        query["tag"] = tag
+    if q:
+        query["name"] = {"$regex": q, "$options": "i"}
+    cursor = db.kb_docs.find(query, {"_id": 0}).sort("name", 1).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    return {"total": len(docs), "items": docs}
+
+
+@api_router.post("/kb", status_code=201)
+async def create_kb(payload: KbDocCreate):
+    data = payload.model_dump()
+    if not data.get("doc_id"):
+        data["doc_id"] = f"KB-{uuid.uuid4().hex[:6].upper()}"
+    doc = KbDoc(**data).model_dump()
+    try:
+        await db.kb_docs.insert_one({**doc})
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail=f"doc {doc['doc_id']} already exists")
+    return doc
 
 
 # ---- Register router ----
